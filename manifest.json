@@ -1,0 +1,26 @@
+
+{
+  "name": "Steel Market Analysis Dashboard",
+  "short_name": "Steel Dash",
+  "description": "A comprehensive dashboard for analyzing the Iranian and global steel markets, providing real-time data, charts, news, and strategic insights for professionals in the steel industry.",
+  "icons": [
+    {
+      "src": "icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "scope": ".",
+  "lang": "fa"
+}
