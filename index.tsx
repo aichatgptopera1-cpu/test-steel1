@@ -1,16 +1,13 @@
 
 
-import React, { useState, useMemo, useCallback, useEffect, useRef, memo, Component, ErrorInfo, ReactNode, useContext } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, memo, Component, ErrorInfo, ReactNode, useContext, createContext } from 'react';
 import ReactDOM from 'react-dom/client';
-// FIX: Import `createPortal` from `react-dom` to be used in the Modal component.
 import { createPortal } from 'react-dom';
 import { AreaChart, Area, CartesianGrid, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Legend, ReferenceLine } from 'recharts';
 import { GoogleGenAI, Chat } from '@google/genai';
 
-// --- BUNDLED FROM types.ts ---
-// FIX: Import React to make React types available for JSX namespace augmentation.
-// This is already handled by the top-level import in the bundled file.
 
+// --- BUNDLED FROM types.ts ---
 enum Page {
   DASHBOARD,
   ANALYSIS,
@@ -28,6 +25,12 @@ interface TechnicalInfo {
     summary: string;
 }
 
+interface ProductPriceRow {
+  spec: string; 
+  dimension: string | number;
+  price: number;
+}
+
 interface ProductData {
   title: string;
   price: number;
@@ -42,6 +45,7 @@ interface ProductData {
   source: string;
   lastUpdated: string;
   technicalInfo: TechnicalInfo;
+  detailedPrices: ProductPriceRow[];
 }
 
 interface GlobalCommodityData {
@@ -79,7 +83,6 @@ interface Article {
   type: Omit<NewsType, 'all'>;
 }
 
-// Types for Premium Analysis Page
 interface Expert {
   name: string;
   credentials: string;
@@ -100,11 +103,10 @@ interface PremiumReport {
   publishedAt: Date;
   content: ReportContent;
   keyTakeaways: string[];
-  chartData?: any; // Define a more specific type if chart structure is known
+  chartData?: any;
   downloadUrl: string;
 }
 
-// Types for AI Prediction Page
 interface PredictionDataPoint {
   name: string;
   low: number;
@@ -154,9 +156,11 @@ interface ChatMessage {
 type PredictionData = Record<string, Record<string, PredictionResult>>;
 type WhatIfData = Record<string, WhatIfVariable>;
 
+
 // --- BUNDLED FROM contexts/ThemeContext.tsx ---
 type Theme = 'light' | 'dark';
 const ThemeContext = React.createContext<{ theme: Theme; toggleTheme: () => void; } | null>(null);
+
 
 // --- BUNDLED FROM utils/date.ts ---
 const getPastMonthLabels = (): string[] => {
@@ -177,6 +181,7 @@ const getPastDaysLabels = (count: number): string[] => {
     }
     return labels;
 };
+
 
 // --- BUNDLED FROM utils/chartData.ts ---
 const generateMonthlyData = (startValue: number, endValue: number, points: number): number[] => {
@@ -200,9 +205,10 @@ const calculateSMA = (data: number[], period: number): (number | null)[] => {
     return sma;
 };
 
+
 // --- BUNDLED FROM data.ts ---
 const lastUpdatedDate = new Date().toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
-const productsData: ProductsData = {
+const initialProductsData: ProductsData = {
   'hot-rolled': {
     title: 'ورق گرم',
     price: 42100, change: 0.7, weeklyChange: 1.8, monthlyChange: 4.5, volume: 4500,
@@ -219,6 +225,13 @@ const productsData: ProductsData = {
         resistance: 42800,
         summary: 'قیمت در نزدیکی منطقه مقاومت قرار دارد و RSI به منطقه اشباع خرید نزدیک می‌شود. احتمال یک اصلاح کوتاه‌مدت وجود دارد. توصیه به احتیاط و انتظار برای شکست مقاومت یا بازگشت به سمت حمایت است.'
     },
+    detailedPrices: [
+        { spec: 'ضخامت 2mm', dimension: 1250, price: 41800 },
+        { spec: 'ضخامت 3mm', dimension: 1500, price: 42000 },
+        { spec: 'ضخامت 5mm', dimension: 1500, price: 42100 },
+        { spec: 'ضخامت 8mm', dimension: 1500, price: 42250 },
+        { spec: 'ضخامت 10mm', dimension: 1500, price: 42300 },
+    ],
   },
   'cold-rolled': {
     title: 'ورق سرد',
@@ -236,6 +249,12 @@ const productsData: ProductsData = {
         resistance: 48500,
         summary: 'روند صعودی قوی است اما RSI وارد منطقه اشباع خرید شده. هرچند سیگنال خرید است اما ورود پله‌ای و با احتیاط توصیه می‌شود. شکست مقاومت ۴۸۵۰۰ می‌تواند رشد را تسریع کند.'
     },
+    detailedPrices: [
+        { spec: 'ضخامت 0.5mm', dimension: 1000, price: 48200 },
+        { spec: 'ضخامت 0.7mm', dimension: 1250, price: 47900 },
+        { spec: 'ضخامت 0.9mm', dimension: 1250, price: 47750 },
+        { spec: 'ضخامت 1mm', dimension: 1250, price: 47600 },
+    ],
   },
   'galvanized': {
     title: 'ورق گالوانیزه',
@@ -253,6 +272,11 @@ const productsData: ProductsData = {
         resistance: 54000,
         summary: 'روند صعودی پایدار با RSI در محدوده مناسب. تا زمانی که قیمت بالای حمایت ۵۲۰۰۰ تومان قرار دارد، چشم‌انداز مثبت است. هدف بعدی، مقاومت ۵۴۰۰۰ تومان است.'
     },
+    detailedPrices: [
+        { spec: 'ضخامت 0.5mm', dimension: 1250, price: 53100 },
+        { spec: 'ضخامت 0.8mm', dimension: 1250, price: 52800 },
+        { spec: 'ضخامت 1mm', dimension: 1250, price: 52500 },
+    ],
   },
   'rebars': {
     title: 'میلگرد',
@@ -270,6 +294,14 @@ const productsData: ProductsData = {
         resistance: 25500,
         summary: 'قیمت در یک کانال خنثی با تمایل به صعود قرار دارد. برای خرید، بهتر است منتظر شکست مقاومت ۲۵۵۰۰ یا اصلاح قیمت به سمت حمایت ۲۴۸۰۰ بود.'
     },
+    detailedPrices: [
+        { spec: 'سایز 12', dimension: 'A3', price: 25450 },
+        { spec: 'سایز 14', dimension: 'A3', price: 25150 },
+        { spec: 'سایز 16', dimension: 'A3', price: 25150 },
+        { spec: 'سایز 18', dimension: 'A3', price: 25200 },
+        { spec: 'سایز 20', dimension: 'A3', price: 25200 },
+        { spec: 'سایز 22', dimension: 'A3', price: 25300 },
+    ],
   },
   'i-beam': {
     title: 'تیرآهن',
@@ -287,6 +319,12 @@ const productsData: ProductsData = {
         resistance: 40500,
         summary: 'روند حرکتی کند و نوسانات محدود است. بازار در حالت انتظار به سر می‌برد. استراتژی مناسب، خرید در کف‌های قیمتی و فروش در سقف‌ها است.'
     },
+    detailedPrices: [
+        { spec: 'سایز 14', dimension: '12m', price: 39800 },
+        { spec: 'سایز 16', dimension: '12m', price: 39950 },
+        { spec: 'سایز 18', dimension: '12m', price: 40100 },
+        { spec: 'سایز 20', dimension: '12m', price: 40500 },
+    ],
   },
   'slab': {
     title: 'اسلب',
@@ -304,9 +342,13 @@ const productsData: ProductsData = {
         resistance: 35800,
         summary: 'قیمت با قدرت در حال صعود است. RSI به مرز اشباع خرید رسیده اما حجم معاملات بالا، نشان از قدرت خریداران دارد. هدف اول مقاومت ۳۵۸۰۰ است.'
     },
+    detailedPrices: [
+        { spec: 'فولاد خوزستان', dimension: '1500*250', price: 35200 },
+        { spec: 'فولاد هرمزگان', dimension: '1500*200', price: 35100 },
+    ],
   },
 };
-const globalCommoditiesData: GlobalCommoditiesData = {
+const initialGlobalCommoditiesData: GlobalCommoditiesData = {
     'hrc': {
         title: 'فولاد HRC',
         chartData: [752, 770, 785, 775, 765, 770, 778],
@@ -392,6 +434,7 @@ const globalCommoditiesData: GlobalCommoditiesData = {
         },
     }
 };
+
 
 // --- BUNDLED FROM data/news.ts ---
 const categoryInfo: Record<NewsCategory, { name: string; color: string; }> = {
@@ -639,6 +682,7 @@ const newsData: Article[] = [
     },
 ];
 
+
 // --- BUNDLED FROM data/premiumAnalysis.ts ---
 const analystTeam: Expert = {
   name: 'تیم تحلیلگران ارشد',
@@ -808,6 +852,7 @@ const premiumReports: PremiumReport[] = [
   }
 ];
 
+
 // --- BUNDLED FROM data/prediction.ts ---
 const generateForecast = (start: number, end: number, points: number, volatility: number, hasHistory: boolean) => {
     const data = [];
@@ -843,7 +888,7 @@ const generateForecast = (start: number, end: number, points: number, volatility
     }
     return data;
 };
-const predictionData: PredictionData = {
+const initialPredictionData: PredictionData = {
     'hot-rolled': {
         '7': {
             accuracy: 94,
@@ -902,7 +947,7 @@ const predictionData: PredictionData = {
             accuracy: 85,
             forecast: generateForecast(48200, 49500, 10, 0.05, false).map((p, i) => ({...p, name: `${i*3} روز بعد`})),
             factors: [
-                { name: 'تقاضای لوازم خانگی', impact: 'رشد فصلی', direction: 'up', description: 'در برخی فصول مانند نزدیک به اعیاد، تقاضا برای لوازم خانگی افزایش یافته و تولیدکنندگان خرید ورق سرد را افزایش می‌ده دهند.' },
+                { name: 'تقاضای لوازم خانگی', impact: 'رشد فصلی', direction: 'up', description: 'در برخی فصول مانند نزدیک به اعیاد، تقاضا برای لوازم خانگی افزایش یافته و تولیدکنندگان خرید ورق سرد را افزایش می‌دهند.' },
                 { name: 'قیمت جهانی فولاد', impact: 'صعودی', direction: 'up', description: 'افزایش قیمت در بازارهای جهانی، قیمت‌های داخلی را نیز برای حفظ قابلیت صادرات، حمایت می‌کند.' },
                 { name: 'هزینه انرژی', impact: 'احتمال افزایش', direction: 'up', description: 'هرگونه افزایش در قیمت برق، هزینه تولید را در کارخانجات نورد سرد به شکل قابل توجهی بالا می‌برد.' }
             ],
@@ -1045,14 +1090,158 @@ const whatIfInitialData: WhatIfData = {
     'cokingCoal': { id: 'cokingCoal', name: 'زغال سنگ کک شو', value: 253, min: 200, max: 350, step: 1, unit: 'دلار'}
 };
 
-// --- BUNDLED FROM components/ErrorBoundary.tsx ---
-class ErrorBoundary extends Component<
-    { children: ReactNode; fallbackMessage?: string; }, 
-    { hasError: boolean; }
-> {
-  public state = { hasError: false };
 
-  public static getDerivedStateFromError(_: Error) {
+// --- BUNDLED FROM services/marketService.ts ---
+const fluctuate = (value: number, percent: number): number => {
+    const change = (Math.random() - 0.5) * 2 * (percent / 100);
+    return value * (1 + change);
+};
+const updateChartData = (oldData: number[], newPrice: number): number[] => {
+    const newData = [...oldData.slice(1), Math.round(newPrice)];
+    return newData;
+};
+const fetchUpdatedMarketData = async (
+    currentProducts: ProductsData, 
+    currentGlobal: GlobalCommoditiesData,
+    currentPredictions: PredictionData
+): Promise<{ productsData: ProductsData; globalCommoditiesData: GlobalCommoditiesData, predictionData: PredictionData }> => {
+    
+    await new Promise(res => setTimeout(res, 1500));
+
+    const newProductsData: ProductsData = JSON.parse(JSON.stringify(currentProducts));
+    const newGlobalData: GlobalCommoditiesData = JSON.parse(JSON.stringify(currentGlobal));
+    const newPredictionData: PredictionData = JSON.parse(JSON.stringify(currentPredictions));
+
+    let basePriceChanges: {[key: string]: number} = {};
+
+    for (const key in newProductsData) {
+        const product = newProductsData[key];
+        const oldPrice = product.price;
+        const newPrice = fluctuate(oldPrice, 1.5);
+        
+        const changePercent = (newPrice - oldPrice) / oldPrice;
+        basePriceChanges[key] = changePercent;
+
+        product.price = Math.round(newPrice);
+        product.change = parseFloat((changePercent * 100).toFixed(2));
+        product.weeklyChange = parseFloat((fluctuate(product.weeklyChange, 5)).toFixed(2));
+        product.monthlyChange = parseFloat((fluctuate(product.monthlyChange, 10)).toFixed(2));
+        product.chartData = updateChartData(product.chartData, newPrice);
+        
+        if (product.detailedPrices) {
+            product.detailedPrices = product.detailedPrices.map((row: ProductPriceRow) => ({
+                ...row,
+                price: Math.round(row.price * (1 + changePercent)),
+            }));
+        }
+        
+        product.technicalInfo.support = Math.round(fluctuate(product.technicalInfo.support, 1));
+        product.technicalInfo.resistance = Math.round(fluctuate(product.technicalInfo.resistance, 1));
+        product.technicalInfo.rsi = Math.max(15, Math.min(85, fluctuate(product.technicalInfo.rsi, 5)));
+    }
+
+    for (const key in newGlobalData) {
+        const commodity = newGlobalData[key];
+        const newPrice = fluctuate(commodity.chartData[commodity.chartData.length - 1], 2.0);
+        commodity.chartData = updateChartData(commodity.chartData, newPrice);
+
+        commodity.technicalInfo.support = Math.round(fluctuate(commodity.technicalInfo.support, 1.5));
+        commodity.technicalInfo.resistance = Math.round(fluctuate(commodity.technicalInfo.resistance, 1.5));
+        commodity.technicalInfo.rsi = Math.max(15, Math.min(85, fluctuate(commodity.technicalInfo.rsi, 8)));
+    }
+
+    for (const productKey in newPredictionData) {
+        if (basePriceChanges[productKey]) {
+            const changeFactor = 1 + basePriceChanges[productKey];
+            for (const horizonKey in newPredictionData[productKey]) {
+                const prediction = newPredictionData[productKey][horizonKey];
+                prediction.forecast = prediction.forecast.map((point: PredictionDataPoint) => ({
+                    ...point,
+                    low: point.actual ? point.actual : Math.round(point.low * changeFactor),
+                    mid: point.actual ? point.actual : Math.round(point.mid * changeFactor),
+                    high: point.actual ? point.actual : Math.round(point.high * changeFactor),
+                }));
+            }
+        }
+    }
+
+    return { productsData: newProductsData, globalCommoditiesData: newGlobalData, predictionData: newPredictionData };
+};
+
+
+// --- BUNDLED FROM contexts/MarketDataContext.tsx ---
+// FIX: Define MarketDataContextType interface to resolve type errors.
+interface MarketDataContextType {
+    productsData: ProductsData;
+    globalCommoditiesData: GlobalCommoditiesData;
+    predictionData: PredictionData;
+    lastUpdated: Date;
+    isLoading: boolean;
+    refreshData: () => void;
+}
+const MarketDataContext = createContext<MarketDataContextType | undefined>(undefined);
+const MarketDataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [data, setData] = useState({
+        productsData: initialProductsData,
+        globalCommoditiesData: initialGlobalCommoditiesData,
+        predictionData: initialPredictionData,
+    });
+    const [isLoading, setIsLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState(new Date());
+
+    const refreshData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const updatedData = await fetchUpdatedMarketData(data.productsData, data.globalCommoditiesData, data.predictionData);
+            setData(updatedData);
+            setLastUpdated(new Date());
+        } catch (error) {
+            console.error("Failed to fetch market data:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [data.productsData, data.globalCommoditiesData, data.predictionData]);
+
+    useEffect(() => {
+        refreshData();
+    }, []);
+
+    const value = useMemo(() => ({
+        ...data,
+        isLoading,
+        lastUpdated,
+        refreshData,
+    }), [data, isLoading, lastUpdated, refreshData]);
+
+    return (
+        <MarketDataContext.Provider value={value}>
+            {children}
+        </MarketDataContext.Provider>
+    );
+};
+const useMarketData = (): MarketDataContextType => {
+    const context = useContext(MarketDataContext);
+    if (context === undefined) {
+        throw new Error('useMarketData must be used within a MarketDataProvider');
+    }
+    return context;
+};
+
+// --- BUNDLED FROM components/ErrorBoundary.tsx ---
+// FIX: Define Props and State interfaces for ErrorBoundary component.
+interface Props {
+  children: ReactNode;
+  fallbackMessage?: string;
+}
+interface State {
+  hasError: boolean;
+}
+class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+  };
+
+  public static getDerivedStateFromError(_: Error): State {
     return { hasError: true };
   }
 
@@ -1069,9 +1258,11 @@ class ErrorBoundary extends Component<
         </div>
       );
     }
+
     return this.props.children;
   }
 }
+
 
 // --- BUNDLED FROM components/Card.tsx ---
 const Card: React.FC<{ children: React.ReactNode; className?: string; }> = memo(({ children, className = '' }) => {
@@ -1083,6 +1274,7 @@ const Card: React.FC<{ children: React.ReactNode; className?: string; }> = memo(
     </div>
   );
 });
+
 
 // --- BUNDLED FROM components/Charts.tsx ---
 const AnalyticsChart: React.FC<{ data: any[]; dataKey: string; color: string; unit: string; labels: string[]; simple?: boolean; }> = ({ data, dataKey, color, unit, labels, simple = false }) => {
@@ -1170,6 +1362,7 @@ const GaugeChart: React.FC<{ value: number; color: string; }> = ({ value, color 
   ];
   const context = useContext(ThemeContext);
   const remainderColor = context?.theme === 'dark' ? '#334155' : '#e2e8f0';
+
 
   return (
     <div className="relative w-full h-24 sm:h-28">
@@ -1318,7 +1511,6 @@ const PredictionChart: React.FC<{ data: any[]; unit: string; }> = ({ data, unit 
                     />
                     <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '12px' }} />
                     
-                    {/* Confidence Band */}
                     <Area 
                         type="monotone" 
                         dataKey="high" 
@@ -1349,7 +1541,6 @@ const PredictionChart: React.FC<{ data: any[]; unit: string; }> = ({ data, unit 
                         activeDot={{ r: 6, strokeWidth: 2, fill: midColor, stroke: isDark ? '#020617' : '#f8fafc' }}
                     />
 
-                    {/* Show actual price if available */}
                     <Line
                         type="monotone"
                         dataKey="actual"
@@ -1367,45 +1558,6 @@ const PredictionChart: React.FC<{ data: any[]; unit: string; }> = ({ data, unit 
     );
 };
 
-// --- BUNDLED FROM components/Header.tsx ---
-const Header: React.FC<{ title: string; }> = memo(({ title }) => {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setLastUpdated(new Date());
-      setIsRefreshing(false);
-    }, 1500);
-  };
-
-  return (
-    <header className="bg-slate-50/70 dark:bg-slate-950/70 backdrop-blur-lg border-b border-slate-200/80 dark:border-slate-800/80 p-4 sticky top-0 z-40 flex flex-col sm:flex-row justify-between items-center gap-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{title}</h1>
-        <span className="inline-flex items-center gap-2 text-xs py-1 px-2 rounded-full bg-slate-200/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300">
-          <i className="fas fa-clock"></i>
-          <span>{lastUpdated.toLocaleTimeString('fa-IR')}</span>
-        </span>
-      </div>
-      <button 
-        onClick={handleRefresh}
-        disabled={isRefreshing}
-        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-wait w-36"
-      >
-        {isRefreshing ? (
-          <div className="w-5 h-5 border-2 border-slate-400 border-t-indigo-500 rounded-full animate-spin"></div>
-        ) : (
-          <>
-            <i className="fas fa-sync-alt"></i>
-            <span>بروزرسانی</span>
-          </>
-        )}
-      </button>
-    </header>
-  );
-});
 
 // --- BUNDLED FROM components/Pagination.tsx ---
 const Pagination: React.FC<{ currentPage: number; totalPages: number; onPageChange: (page: number) => void; }> = ({ currentPage, totalPages, onPageChange }) => {
@@ -1452,6 +1604,7 @@ const Pagination: React.FC<{ currentPage: number; totalPages: number; onPageChan
       pageNumbers.push(totalPages);
   }
 
+
   return (
     <nav className="flex items-center justify-center gap-2 mt-6" aria-label="Pagination">
       <button
@@ -1496,6 +1649,7 @@ const Pagination: React.FC<{ currentPage: number; totalPages: number; onPageChan
   );
 };
 
+
 // --- BUNDLED FROM components/Modal.tsx ---
 const Modal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.ReactNode; }> = ({ isOpen, onClose, children }) => {
   useEffect(() => {
@@ -1526,6 +1680,7 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.Re
     return null;
   }
 
+
   const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm"
@@ -1550,9 +1705,9 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.Re
     </div>
   );
 
-  // FIX: Use `createPortal` from `react-dom` instead of from `react-dom/client`.
   return createPortal(modalContent, modalRoot);
 };
+
 
 // --- BUNDLED FROM components/AuthorInfo.tsx ---
 const AuthorInfo: React.FC<{ onShowResume: () => void; }> = ({ onShowResume }) => {
@@ -1588,6 +1743,39 @@ const AuthorInfo: React.FC<{ onShowResume: () => void; }> = ({ onShowResume }) =
   );
 };
 
+
+// --- BUNDLED FROM components/Header.tsx ---
+const Header: React.FC<{ title: string; }> = memo(({ title }) => {
+  const { isLoading, lastUpdated, refreshData } = useMarketData();
+
+  return (
+    <header className="bg-slate-50/70 dark:bg-slate-950/70 backdrop-blur-lg border-b border-slate-200/80 dark:border-slate-800/80 p-4 sticky top-0 z-40 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{title}</h1>
+        <span className="inline-flex items-center gap-2 text-xs py-1 px-2 rounded-full bg-slate-200/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300">
+          <i className="fas fa-clock"></i>
+          <span>{lastUpdated.toLocaleTimeString('fa-IR')}</span>
+        </span>
+      </div>
+      <button 
+        onClick={refreshData}
+        disabled={isLoading}
+        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-wait w-36"
+      >
+        {isLoading ? (
+          <div className="w-5 h-5 border-2 border-slate-400 border-t-indigo-500 rounded-full animate-spin"></div>
+        ) : (
+          <>
+            <i className="fas fa-sync-alt"></i>
+            <span>بروزرسانی</span>
+          </>
+        )}
+      </button>
+    </header>
+  );
+});
+
+
 // --- BUNDLED FROM components/BottomNav.tsx ---
 const navItems = [
   { page: Page.DASHBOARD, icon: 'fa-home', label: 'داشبورد' },
@@ -1597,7 +1785,7 @@ const navItems = [
   { page: Page.NEWS, icon: 'fa-newspaper', label: 'اخبار' },
   { page: Page.PREMIUM_ANALYSIS, icon: 'fa-gem', label: 'ویژه' },
 ];
-const NavButton: React.FC<{ item: typeof navItems[0]; isActive: boolean; onClick: () => void; }> = ({ item, isActive, onClick }) => {
+const NavButton: React.FC<{ item: typeof navItems[0], isActive: boolean, onClick: () => void }> = ({ item, isActive, onClick }) => {
     const activeText = 'text-indigo-600 dark:text-indigo-400';
     const inactiveText = 'text-slate-500 dark:text-slate-400';
     
@@ -1624,6 +1812,7 @@ const BottomNav: React.FC<{ activePage: Page; setPage: (page: Page) => void; }> 
     </nav>
   );
 };
+
 
 // --- BUNDLED FROM components/ThemeToggle.tsx ---
 const ThemeToggle: React.FC = () => {
@@ -1661,6 +1850,137 @@ const ThemeToggle: React.FC = () => {
   );
 };
 
+
+// --- BUNDLED FROM pages/ResumePage.tsx ---
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <section className="mb-8">
+    <h3 className="text-xl font-bold border-r-4 border-indigo-500 pr-3 mb-4 text-slate-800 dark:text-slate-200">{title}</h3>
+    <ul className="space-y-3">{children}</ul>
+  </section>
+);
+const ListItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <li className="flex items-start">
+    <i className="fas fa-check-circle text-indigo-400 mt-1.5 ml-3 flex-shrink-0"></i>
+    <span>{children}</span>
+  </li>
+);
+const Skill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <li className="flex items-start">
+      <i className="fas fa-star text-amber-400 mt-1.5 ml-3 flex-shrink-0"></i>
+      <span>{children}</span>
+    </li>
+);
+const ResumePage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="animate-fadeIn mt-6 mb-6">
+        <div className="p-4 sm:p-8 bg-white dark:bg-slate-900/70 rounded-2xl shadow-2xl relative print:shadow-none print:p-0 print:m-0">
+            <style>{`
+                @media print {
+                body {
+                    background-color: #fff !important;
+                }
+                html, body {
+                    font-size: 10pt;
+                }
+                .no-print {
+                    display: none !important;
+                }
+                .print-break-before {
+                    page-break-before: always;
+                }
+                .dark .print-dark-hidden {
+                    display: none;
+                }
+                .dark body {
+                    color: #000 !important;
+                }
+                .dark h1, .dark h2, .dark h3, .dark span, .dark p, .dark li {
+                    color: #000 !important;
+                }
+                .dark section {
+                    border-color: #000 !important;
+                }
+                }
+            `}</style>
+            <div className="absolute top-4 right-4 flex gap-2 no-print">
+                <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold transition-colors">
+                    <i className="fas fa-arrow-right"></i>
+                    <span>بازگشت</span>
+                </button>
+                <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm hover:bg-indigo-700 transition-colors">
+                    <i className="fas fa-print"></i>
+                    <span>چاپ / ذخیره PDF</span>
+                </button>
+            </div>
+            
+            <div className="resume-container max-w-4xl mx-auto text-slate-800 dark:text-slate-300">
+                <div>
+                <header className="flex flex-col sm:flex-row justify-between items-center border-b-2 border-dashed pb-4 mb-6">
+                    <div className="text-center sm:text-right order-2 sm:order-1">
+                        <h1 className="text-4xl font-extrabold text-slate-900 dark:text-slate-100">علی ثابت</h1>
+                        <p className="mt-2 font-semibold">تلفن : ۰۹۱۲۶۲۶۵۵۰۸</p>
+                        <p className="font-semibold">ایمیل : Dr.alisabett@gmail.com</p>
+                    </div>
+                    <div className="w-32 h-32 rounded-full mb-4 sm:mb-0 order-1 sm:order-2 bg-slate-200 dark:bg-slate-700 flex items-center justify-center shadow-md">
+                        <i className="fas fa-user-tie text-6xl text-indigo-500 dark:text-indigo-400"></i>
+                    </div>
+                </header>
+                
+                <Section title="خلاصه تجربیات">
+                    <ListItem>بیش از ۲۰ سال سابقه فعالیت در بازارهای کالایی ایران و جهان، با تمرکز ویژه بر صنعت فولاد.</ListItem>
+                    <ListItem>تحلیلگر ارشد و استراتژیست بازار، مسلط بر تحلیل‌های بنیادی و تکنیکال.</ListItem>
+                    <ListItem>دارای دکترای اقتصاد با گرایش بازارهای مالی و کالایی.</ListItem>
+                    <ListItem>مدرس دوره‌های تخصصی تحلیل بازار فولاد و مدیریت ریسک در بورس کالا.</ListItem>
+                </Section>
+
+                <Section title="سوابق تحصیلی">
+                    <ListItem><strong>دکترای اقتصاد:</strong> دانشگاه تهران، با رساله "تحلیل نوسانات قیمت در زنجیره ارزش فولاد ایران"</ListItem>
+                    <ListItem><strong>کارشناسی ارشد مدیریت بازرگانی (MBA):</strong> دانشگاه صنعتی شریف</ListItem>
+                    <ListItem><strong>کارشناسی مهندسی مواد - متالورژی صنعتی:</strong> دانشگاه علم و صنعت ایران</ListItem>
+                </Section>
+                
+                <Section title="سوابق اجرایی و مدیریتی">
+                    <ListItem><strong>مدیرعامل و عضو هیئت مدیره شرکت سرمایه‌گذاری آتیه فولاد نقش جهان</strong> (۱۳۹۹ - تاکنون)</ListItem>
+                    <ListItem><strong>معاون بازرگانی شرکت فولاد مبارکه اصفهان</strong> (۱۳۹۵ - ۱۳۹۹)</ListItem>
+                    <ListItem><strong>مدیر فروش داخلی و صادرات شرکت فولاد خوزستان</strong> (۱۳۹۰ - ۱۳۹۵)</ListItem>
+                    <ListItem><strong>کارشناس و تحلیلگر ارشد بورس کالای ایران</strong> (۱۳۸۶ - ۱۳۹۰)</ListItem>
+                </Section>
+                </div>
+                
+                <div className="print-break-before">
+                <Section title="مهارت‌های تخصصی">
+                    <Skill>تحلیل بنیادی (Fundamental Analysis) زنجیره فولاد (سنگ آهن، قراضه، محصولات نهایی)</Skill>
+                    <Skill>تحلیل تکنیکال (Technical Analysis) پیشرفته و الگوهای قیمتی</Skill>
+                    <Skill>مدیریت ریسک و ابزارهای پوشش ریسک (قراردادهای آتی و اختیار معامله)</Skill>
+                    <Skill>آشنایی کامل با بازارهای LME, SHFE و Platts</Skill>
+                    <Skill>اقتصاد کلان و تأثیر آن بر بازارهای کالایی</Skill>
+                    <Skill>اصول بازاریابی، فروش و توسعه بازارهای صادراتی</Skill>
+                </Section>
+
+                <Section title="دستاوردها و افتخارات">
+                    <ListItem>افزایش سهم بازار صادراتی فولاد مبارکه به میزان ۳۰٪ در دوران تصدی معاونت بازرگانی.</ListItem>
+                    <ListItem>طراحی و پیاده‌سازی سیستم نوین قیمت‌گذاری محصولات فولادی در بورس کالا.</ListItem>
+                    <ListItem>کسب عنوان "تحلیلگر برتر کالایی" از جشنواره بورس ایران (سه دوره).</ListItem>
+                    <ListItem>چاپ بیش از ۱۰ مقاله علمی-پژوهشی در مجلات معتبر اقتصادی و متالورژی.</ListItem>
+                </Section>
+
+                <Section title="دوره‌ها و گواهینامه‌های بین‌المللی">
+                    <ListItem>گواهینامه تحلیلگری بازارهای کالایی از موسسه LME Education لندن</ListItem>
+                    <ListItem>دوره پیشرفته مدیریت استراتژیک از دانشگاه INSEAD فرانسه</ListItem>
+                    <ListItem>گواهینامه اصول مدیریت پروژه (PMP)</ListItem>
+                </Section>
+                </div>
+            </div>
+        </div>
+    </div>
+  );
+};
+
+
 // --- BUNDLED FROM pages/DashboardPage.tsx ---
 const KpiCard: React.FC<{ title: string; value: string; change?: string; changeType?: 'up' | 'down'; icon: string; }> = ({ title, value, change, changeType, icon }) => {
   const changeColor = changeType === 'up' ? 'text-emerald-500' : 'text-red-500';
@@ -1675,22 +1995,47 @@ const KpiCard: React.FC<{ title: string; value: string; change?: string; changeT
     </Card>
   );
 };
+const LoadingOverlay: React.FC = () => (
+    <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm flex justify-center items-center z-30 rounded-2xl">
+        <div className="w-8 h-8 border-4 border-slate-300 dark:border-slate-600 border-t-indigo-500 rounded-full animate-spin"></div>
+    </div>
+);
 const DashboardPage: React.FC = () => {
-    const domesticIndexData = generateMonthlyData(12450, 12780, 30);
-    const domesticIndexSMA = calculateSMA(domesticIndexData, 7);
-    const technicalIndexChartData = domesticIndexData.map((value, index) => ({
-        name: (getPastMonthLabels()[index] || ''),
-        value: value,
-        ma: domesticIndexSMA[index]
-    }));
-    
-    const dollarData = generateMonthlyData(60500, 61850, 30);
-    const dollarSMA = calculateSMA(dollarData, 7);
-    const technicalDollarChartData = dollarData.map((value, index) => ({
-        name: (getPastMonthLabels()[index] || ''),
-        value: value,
-        ma: dollarSMA[index]
-    }));
+    const { productsData, globalCommoditiesData, isLoading } = useMarketData();
+
+    const { kpiHotRolled, kpiHrc, kpiDollar, technicalIndexChartData, technicalDollarChartData } = useMemo(() => {
+        const hotRolled = productsData['hot-rolled'];
+        const hrc = globalCommoditiesData['hrc'];
+        
+        const dollarValue = 61850 * (1 + (hotRolled.change / 100) * 0.3);
+        const dollarChange = (hotRolled.change * 0.3).toFixed(2);
+
+        const indexData = hotRolled.chartData;
+        const indexSma = calculateSMA(indexData, 3);
+        const techIndexChart = indexData.map((value, index) => ({
+            name: getPastDaysLabels(indexData.length)[index] || '',
+            value: value,
+            ma: indexSma[index]
+        }));
+        
+        const dollarChart = indexData.map(p => p * 1.47);
+        const dollarSma = calculateSMA(dollarChart, 3);
+         const techDollarChart = dollarChart.map((value, index) => ({
+            name: getPastDaysLabels(indexData.length)[index] || '',
+            value: value,
+            ma: dollarSma[index]
+        }));
+
+
+        return {
+            kpiHotRolled: hotRolled,
+            kpiHrc: hrc,
+            kpiDollar: { price: dollarValue, change: parseFloat(dollarChange) },
+            technicalIndexChartData: techIndexChart,
+            technicalDollarChartData: techDollarChart
+        };
+    }, [productsData, globalCommoditiesData]);
+
 
   return (
     <div className="animate-fadeIn">
@@ -1701,11 +2046,12 @@ const DashboardPage: React.FC = () => {
           <p className="text-sm opacity-90 max-w-md mx-auto">راهنمای استراتژیک برای تصمیم‌گیری در بازار پرنوسان فولاد</p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 relative">
+          {isLoading && <LoadingOverlay />}
           <KpiCard title="شاخص کل فولاد" value="۱۲,۷۸۰" change="+۰.۹٪" changeType="up" icon="fa-chart-pie" />
-          <KpiCard title="ورق گرم داخلی" value="۴۲,۱۰۰ ت" change="+۰.۷٪" changeType="up" icon="fa-layer-group" />
-          <KpiCard title="HRC جهانی" value="۷۷۸$" change="+۰.۸٪" changeType="up" icon="fa-globe" />
-          <KpiCard title="دلار آزاد" value="۶۱,۸۵۰ ت" change="+۰.۲٪" changeType="up" icon="fa-dollar-sign" />
+          <KpiCard title="ورق گرم داخلی" value={`${kpiHotRolled.price.toLocaleString('fa-IR')} ت`} change={`${kpiHotRolled.change > 0 ? '+' : ''}${kpiHotRolled.change}%`} changeType={kpiHotRolled.change >= 0 ? 'up' : 'down'} icon="fa-layer-group" />
+          <KpiCard title="HRC جهانی" value={`${kpiHrc.chartData[kpiHrc.chartData.length -1]}$`} change="+۰.۸٪" changeType="up" icon="fa-globe" />
+          <KpiCard title="دلار آزاد" value={`${Math.round(kpiDollar.price).toLocaleString('fa-IR')} ت`} change={`${kpiDollar.change > 0 ? '+' : ''}${kpiDollar.change}%`} changeType={kpiDollar.change >= 0 ? 'up' : 'down'} icon="fa-dollar-sign" />
         </div>
         
         <div className="p-0.5 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl shadow-lg shadow-indigo-400/20">
@@ -1717,7 +2063,7 @@ const DashboardPage: React.FC = () => {
                 </div>
                 <div className="text-slate-700 dark:text-slate-300 space-y-3 text-sm">
                     <p>🔸 <span className="font-semibold">تحلیل:</span> عرضه گسترده در بورس کالا با هدف کنترل نوسانات و پاسخ به تقاضای فصلی انجام می‌شود. این اقدام می‌تواند در کوتاه‌مدت باعث ثبات نسبی در قیمت ورق گرم و میلگرد شود.</p>
-                    <p>🔸 <span className="font-semibold">توصیه فوری:</span> با توجه به افزایش عرضه، خریداران می‌توانند بخشی از نیاز خود را با قیمت‌های رقابتی‌تر از بورس تامین کنند. ریسک اصلی همچنان نوسانات نرخ ارز است.</p>
+                    <p>🔸 <span className="font-semibold">توصیه فوری:</span> با توجه به افزایش عرضه, خریداران می‌توانند بخشی از نیاز خود را با قیمت‌های رقابتی‌تر از بورس تامین کنند. ریسک اصلی همچنان نوسانات نرخ ارز است.</p>
                 </div>
                 <div className="text-right text-xs text-slate-500 dark:text-slate-400 mt-4 pt-4 border-t border-slate-200/80 dark:border-slate-700/80">
                         منبع داده‌ها: تحلیل کارشناسان بر اساس داده‌های بورس کالا
@@ -1726,42 +2072,44 @@ const DashboardPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-center text-lg">تحلیل تکنیکال شاخص فولاد تخت</h3>
+            <Card className="relative">
+              {isLoading && <LoadingOverlay />}
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-center text-lg">تحلیل تکنیکال ورق گرم</h3>
               <ErrorBoundary>
                 <TechnicalAnalysisChart 
                   data={technicalIndexChartData}
                   dataKey="value"
                   maKey="ma"
-                  supportLevel={12500}
-                  resistanceLevel={12800}
-                  unit=""
+                  supportLevel={kpiHotRolled.technicalInfo.support}
+                  resistanceLevel={kpiHotRolled.technicalInfo.resistance}
+                  unit="تومان"
                 />
               </ErrorBoundary>
               <div className="mt-4 text-sm text-slate-700 dark:text-slate-300 space-y-2">
                 <p className="font-semibold">الگوی فعلی: <span className="text-indigo-500 dark:text-indigo-400">کانال صعودی کوتاه‌مدت</span></p>
                 <p>
-                  شاخص در حال حاضر در یک کانال صعودی کوتاه‌مدت حرکت می‌کند و به سقف کانال در محدوده <strong className="text-red-500">مقاومتی ۱۲,۸۰۰</strong> واحد نزدیک شده است. میانگین متحرک ۷ روزه (خط نارنجی) نیز به عنوان حمایت دینامیک عمل می‌کند.
+                  نمودار در حال حاضر در یک کانال صعودی کوتاه‌مدت حرکت می‌کند و به سقف کانال در محدوده <strong className="text-red-500">مقاومتی {kpiHotRolled.technicalInfo.resistance.toLocaleString('fa-IR')}</strong> واحد نزدیک شده است. میانگین متحرک ۳ روزه نیز به عنوان حمایت دینامیک عمل می‌کند.
                 </p>
               </div>
             </Card>
             
-            <Card>
-              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-center text-lg">تحلیل تکنیکال دلار آزاد</h3>
+            <Card className="relative">
+               {isLoading && <LoadingOverlay />}
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-center text-lg">تحلیل تکنیکال دلار آزاد (شبیه‌سازی شده)</h3>
               <ErrorBoundary>
                 <TechnicalAnalysisChart 
                   data={technicalDollarChartData}
                   dataKey="value"
                   maKey="ma"
-                  supportLevel={61000}
-                  resistanceLevel={62500}
+                  supportLevel={Math.round(kpiDollar.price * 0.98)}
+                  resistanceLevel={Math.round(kpiDollar.price * 1.02)}
                   unit="تومان"
                 />
               </ErrorBoundary>
               <div className="mt-4 text-sm text-slate-700 dark:text-slate-300 space-y-2">
                 <p className="font-semibold">الگوی فعلی: <span className="text-indigo-500 dark:text-indigo-400">تثبیت بالای سطح حمایتی</span></p>
                 <p>
-                  دلار پس از یک رشد، در حال حاضر بالای سطح <strong className="text-emerald-500">حمایتی ۶۱,۰۰۰</strong> تومان در حال تثبیت است. مقاومت پیش رو در محدوده <strong className="text-red-500">۶۲,۵۰۰</strong> تومان قرار دارد. شکست این مقاومت می‌تواند سیگنال حرکت به سمت اهداف بالاتر باشد.
+                  دلار پس از یک رشد, در حال حاضر بالای سطح <strong className="text-emerald-500">حمایتی {Math.round(kpiDollar.price * 0.98).toLocaleString('fa-IR')}</strong> تومان در حال تثبیت است. مقاومت پیش رو در محدوده <strong className="text-red-500">{Math.round(kpiDollar.price * 1.02).toLocaleString('fa-IR')}</strong> تومان قرار دارد.
                 </p>
               </div>
             </Card>
@@ -1772,9 +2120,10 @@ const DashboardPage: React.FC = () => {
   );
 };
 
+
 // --- BUNDLED FROM pages/AnalysisPage.tsx ---
-type AnalysisTab = 'domestic' | 'international' | 'products-analysis' | 'strategy' | 'technical';
-const AnalysisTabButton: React.FC<{ label: string; isActive: boolean; onClick: () => void; }> = ({ label, isActive, onClick }) => (
+type Tab = 'domestic' | 'international' | 'products-analysis' | 'strategy' | 'technical';
+const TabButton: React.FC<{ label: string; isActive: boolean; onClick: () => void; }> = ({ label, isActive, onClick }) => (
   <button
     onClick={onClick}
     className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap rounded-full transition-all duration-300 ${isActive ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/70'}`}
@@ -1791,7 +2140,7 @@ const RsiIndicator: React.FC<{ value: number }> = ({ value }) => {
         <div>
             <div className="flex justify-between items-center mb-1 text-xs font-semibold">
                 <span className="text-slate-600 dark:text-slate-400">{label}</span>
-                <span className="text-slate-800 dark:text-slate-200">{value}</span>
+                <span className="text-slate-800 dark:text-slate-200">{Math.round(value)}</span>
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
                 <div className={`${color} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
@@ -1806,29 +2155,43 @@ const RsiIndicator: React.FC<{ value: number }> = ({ value }) => {
     );
 };
 const AnalysisPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<AnalysisTab>('domestic');
-  const [domesticProduct, setDomesticProduct] = useState('hot-rolled');
-  const [globalCommodity, setGlobalCommodity] = useState('hrc');
-  const [selectedProduct, setSelectedProduct] = useState<ProductData>(productsData['hot-rolled']);
-  const [kpiProduct, setKpiProduct] = useState<ProductData>(productsData['hot-rolled']);
+  const { productsData, globalCommoditiesData, isLoading } = useMarketData();
+  const [activeTab, setActiveTab] = useState<Tab>('domestic');
+  const [domesticProductKey, setDomesticProductKey] = useState('hot-rolled');
+  const [globalCommodityKey, setGlobalCommodityKey] = useState('hrc');
+  const [selectedProductKey, setSelectedProductKey] = useState('hot-rolled');
+  const [kpiProductKey, setKpiProductKey] = useState('hot-rolled');
   const [technicalProductKey, setTechnicalProductKey] = useState<string>('hot-rolled');
 
+  const selectedProduct: ProductData = productsData[selectedProductKey];
+  const kpiProduct: ProductData = productsData[kpiProductKey];
 
-  const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setSelectedProduct(productsData[e.target.value]);
+  const allProductsForTechAnalysis = useMemo(() => ({ ...productsData, ...globalCommoditiesData }), [productsData, globalCommoditiesData]);
+  const selectedTechAnalysisData = allProductsForTechAnalysis[technicalProductKey];
+
+  // FIX: Add a guard clause to ensure selectedTechAnalysisData is not undefined.
+  // This can happen during initial render or if keys mismatch.
+  // This also helps TypeScript narrow the type and resolves the "property does not exist on type 'unknown'" errors.
+  if (!selectedTechAnalysisData) {
+    return (
+        <div className="animate-fadeIn">
+            <Header title="تحلیل و استراتژی بازار فولاد" />
+            <main className="py-6">
+                <p>Loading technical analysis data...</p>
+            </main>
+        </div>
+    );
   }
   
-  const handleKpiProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setKpiProduct(productsData[e.target.value]);
-  }
-
-  const allProductsForTechAnalysis = { ...productsData, ...globalCommoditiesData };
-  const selectedTechAnalysisData = allProductsForTechAnalysis[technicalProductKey];
-  const techChartDataWithSma = selectedTechAnalysisData.chartData.map((val, index, arr) => ({
-      name: getPastDaysLabels(arr.length)[index],
-      value: val,
-      ma: calculateSMA(arr, 7)[index]
-  }));
+  const techChartDataWithSma = useMemo(() => {
+    const data = selectedTechAnalysisData.chartData;
+    const sma = calculateSMA(data, 3);
+    return data.map((val, index) => ({
+        name: getPastDaysLabels(data.length)[index],
+        value: val,
+        ma: sma[index]
+    }));
+  }, [selectedTechAnalysisData]);
   
   const renderDataSource = (source: string, lastUpdated: string) => (
       <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 flex justify-between">
@@ -1842,40 +2205,42 @@ const AnalysisPage: React.FC = () => {
       <Header title="تحلیل و استراتژی بازار فولاد" />
       <main className="py-6">
         <div className="p-2 bg-slate-100/80 dark:bg-slate-800/80 rounded-full flex overflow-x-auto mb-6 gap-2">
-          <AnalysisTabButton label="بازار داخلی" isActive={activeTab === 'domestic'} onClick={() => setActiveTab('domestic')} />
-          <AnalysisTabButton label="بازار جهانی" isActive={activeTab === 'international'} onClick={() => setActiveTab('international')} />
-          <AnalysisTabButton label="تحلیل تکنیکال" isActive={activeTab === 'technical'} onClick={() => setActiveTab('technical')} />
-          <AnalysisTabButton label="تحلیل محصولات" isActive={activeTab === 'products-analysis'} onClick={() => setActiveTab('products-analysis')} />
-          <AnalysisTabButton label="استراتژی بازار" isActive={activeTab === 'strategy'} onClick={() => setActiveTab('strategy')} />
+          <TabButton label="بازار داخلی" isActive={activeTab === 'domestic'} onClick={() => setActiveTab('domestic')} />
+          <TabButton label="بازار جهانی" isActive={activeTab === 'international'} onClick={() => setActiveTab('international')} />
+          <TabButton label="تحلیل تکنیکال" isActive={activeTab === 'technical'} onClick={() => setActiveTab('technical')} />
+          <TabButton label="تحلیل محصولات" isActive={activeTab === 'products-analysis'} onClick={() => setActiveTab('products-analysis')} />
+          <TabButton label="استراتژی بازار" isActive={activeTab === 'strategy'} onClick={() => setActiveTab('strategy')} />
         </div>
 
         {activeTab === 'domestic' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
+                <Card className="relative">
+                    {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                     <h3 className="font-bold mb-3">روند قیمت داخلی (هفت روز گذشته)</h3>
-                    <select value={domesticProduct} onChange={e => setDomesticProduct(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select value={domesticProductKey} onChange={e => setDomesticProductKey(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                         {Object.entries(productsData).map(([key, product]) => (
                             <option key={key} value={key}>{product.title}</option>
                         ))}
                     </select>
                     <ErrorBoundary>
-                      <AnalyticsChart data={productsData[domesticProduct].chartData} dataKey={productsData[domesticProduct].title} color="#6366f1" unit={productsData[domesticProduct].unit} labels={getPastDaysLabels(7)} />
+                      <AnalyticsChart data={productsData[domesticProductKey].chartData} dataKey={productsData[domesticProductKey].title} color="#6366f1" unit={productsData[domesticProductKey].unit} labels={getPastDaysLabels(7)} />
                     </ErrorBoundary>
-                    {renderDataSource(productsData[domesticProduct].source, productsData[domesticProduct].lastUpdated)}
+                    {renderDataSource(productsData[domesticProductKey].source, productsData[domesticProductKey].lastUpdated)}
                 </Card>
-                 <Card>
+                 <Card className="relative">
+                    {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                     <h3 className="font-bold mb-3">شاخص‌های کلیدی بازار داخلی</h3>
-                    <select onChange={handleKpiProductChange} defaultValue="hot-rolled" className="w-full p-2 mb-4 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select onChange={e => setKpiProductKey(e.target.value)} value={kpiProductKey} className="w-full p-2 mb-4 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                         {Object.entries(productsData).map(([key, product]) => (
                             <option key={key} value={key}>{product.title}</option>
                         ))}
                     </select>
                     <div className="space-y-3 text-sm">
                         <div className="flex justify-between"><span>قیمت فعلی:</span><span className="font-bold">{kpiProduct.price.toLocaleString('fa-IR')} {kpiProduct.unit}</span></div>
-                        <div className="flex justify-between"><span>تغییر روزانه:</span><span className={`font-bold ${kpiProduct.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.change}%</span></div>
-                        <div className="flex justify-between"><span>تغییر هفتگی:</span><span className={`font-bold ${kpiProduct.weeklyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.weeklyChange}%</span></div>
-                        <div className="flex justify-between"><span>تغییر ماهانه:</span><span className={`font-bold ${kpiProduct.monthlyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.monthlyChange}%</span></div>
+                        <div className="flex justify-between"><span>تغییر روزانه:</span><span className={`font-bold ${kpiProduct.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.change > 0 ? '+' : ''}{kpiProduct.change}%</span></div>
+                        <div className="flex justify-between"><span>تغییر هفتگی:</span><span className={`font-bold ${kpiProduct.weeklyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.weeklyChange > 0 ? '+' : ''}{kpiProduct.weeklyChange}%</span></div>
+                        <div className="flex justify-between"><span>تغییر ماهانه:</span><span className={`font-bold ${kpiProduct.monthlyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.monthlyChange > 0 ? '+' : ''}{kpiProduct.monthlyChange}%</span></div>
                         <div className="flex justify-between"><span>حجم معاملات (تن):</span><span className="font-bold">{kpiProduct.volume.toLocaleString('fa-IR')}</span></div>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/80">
@@ -1889,25 +2254,27 @@ const AnalysisPage: React.FC = () => {
         {activeTab === 'international' && (
             <div className="space-y-6 animate-fadeIn">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card>
+                    <Card className="relative">
+                        {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                         <h3 className="font-bold mb-3">روند قیمت جهانی (هفت روز گذشته)</h3>
-                        <select value={globalCommodity} onChange={e => setGlobalCommodity(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <select value={globalCommodityKey} onChange={e => setGlobalCommodityKey(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                            {Object.entries(globalCommoditiesData).map(([key, commodity]) => (
                                <option key={key} value={key}>{commodity.title}</option>
                            ))}
                         </select>
                         <ErrorBoundary>
-                          <AnalyticsChart data={globalCommoditiesData[globalCommodity].chartData} dataKey={globalCommoditiesData[globalCommodity].title} color="#10b981" unit={globalCommoditiesData[globalCommodity].unit} labels={getPastDaysLabels(7)} />
+                          <AnalyticsChart data={globalCommoditiesData[globalCommodityKey].chartData} dataKey={globalCommoditiesData[globalCommodityKey].title} color="#10b981" unit={globalCommoditiesData[globalCommodityKey].unit} labels={getPastDaysLabels(7)} />
                         </ErrorBoundary>
-                        {renderDataSource(globalCommoditiesData[globalCommodity].source, globalCommoditiesData[globalCommodity].lastUpdated)}
+                        {renderDataSource(globalCommoditiesData[globalCommodityKey].source, globalCommoditiesData[globalCommodityKey].lastUpdated)}
                     </Card>
-                    <Card>
+                    <Card className="relative">
+                        {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                         <h3 className="font-bold mb-3">شاخص‌های کلیدی بازار جهانی</h3>
                         <div className="space-y-3 text-sm">
-                            <div className="flex justify-between"><span>قیمت جهانی فولاد HRC:</span><span className="font-bold">۷۷۸ دلار/تن <span className="text-emerald-500">(+۰.۸٪)</span></span></div>
-                            <div className="flex justify-between"><span>قراضه آهن ترکیه (HMS):</span><span className="font-bold">۴۴۰ دلار/تن <span className="text-emerald-500">(+۰.۴٪)</span></span></div>
-                            <div className="flex justify-between"><span>قیمت سنگ آهن:</span><span className="font-bold">۱۲۲ دلار/تن <span className="text-red-500">(-۰.۸٪)</span></span></div>
-                            <div className="flex justify-between"><span>زغال سنگ کک شو:</span><span className="font-bold">۲۵۳ دلار/تن <span className="text-emerald-500">(+۱.۲٪)</span></span></div>
+                            <div className="flex justify-between"><span>قیمت جهانی فولاد HRC:</span><span className="font-bold">{globalCommoditiesData['hrc'].chartData.slice(-1)[0]} دلار/تن <span className="text-emerald-500">(+۰.۸٪)</span></span></div>
+                            <div className="flex justify-between"><span>قراضه آهن ترکیه (HMS):</span><span className="font-bold">{globalCommoditiesData['scrap-metal'].chartData.slice(-1)[0]} دلار/تن <span className="text-emerald-500">(+۰.۴٪)</span></span></div>
+                            <div className="flex justify-between"><span>قیمت سنگ آهن:</span><span className="font-bold">{globalCommoditiesData['iron-ore'].chartData.slice(-1)[0]} دلار/تن <span className="text-red-500">(-۰.۸٪)</span></span></div>
+                            <div className="flex justify-between"><span>زغال سنگ کک شو:</span><span className="font-bold">{globalCommoditiesData['coking-coal'].chartData.slice(-1)[0]} دلار/تن <span className="text-emerald-500">(+۱.۲٪)</span></span></div>
                         </div>
                         {renderDataSource("Platts, Fastmarkets", globalCommoditiesData['hrc'].lastUpdated)}
                     </Card>
@@ -1934,7 +2301,8 @@ const AnalysisPage: React.FC = () => {
                 </Card>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3">
-                        <Card>
+                        <Card className="relative">
+                            {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                             <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-lg">نمودار تکنیکال {selectedTechAnalysisData.title}</h3>
                              <ErrorBoundary>
                                 <TechnicalAnalysisChart 
@@ -1995,7 +2363,7 @@ const AnalysisPage: React.FC = () => {
             <div className="space-y-6 animate-fadeIn">
                 <Card>
                     <h3 className="font-bold mb-3">انتخاب محصول برای تحلیل جامع</h3>
-                    <select onChange={handleProductChange} defaultValue="hot-rolled" className="w-full p-2 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select onChange={e => setSelectedProductKey(e.target.value)} value={selectedProductKey} className="w-full p-2 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                         {Object.entries(productsData).map(([key, product]) => (
                             <option key={key} value={key}>{product.title}</option>
                         ))}
@@ -2009,7 +2377,8 @@ const AnalysisPage: React.FC = () => {
                         </ul>
                          {renderDataSource(selectedProduct.source, selectedProduct.lastUpdated)}
                     </Card>
-                     <Card>
+                     <Card className="relative">
+                        {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                         <h3 className="font-bold mb-3">نمودار روند قیمت (هفت روز گذشته)</h3>
                         <ErrorBoundary>
                            <AnalyticsChart data={selectedProduct.chartData} dataKey={selectedProduct.title} color="#f59e0b" unit={selectedProduct.unit} labels={getPastDaysLabels(7)} />
@@ -2087,100 +2456,79 @@ const AnalysisPage: React.FC = () => {
   );
 };
 
+
 // --- BUNDLED FROM pages/PricesPage.tsx ---
-interface ProductRow {
-  thickness: number | string;
-  width: number | string;
-  price: string;
-  change: string;
-  changeType: 'up' | 'down';
-}
-interface ProductTableProps {
-  title: string;
-  rows: ProductRow[];
-  headers?: string[];
-}
-const ProductTable: React.FC<ProductTableProps> = ({ title, rows, headers = ['مشخصات', 'عرض / استاندارد', 'قیمت', 'تغییر'] }) => (
-  <Card className="mb-8 last:mb-0">
-    <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-xl border-r-4 border-indigo-500 pr-4">{title}</h4>
-    <div className="overflow-x-auto -mx-4 sm:-mx-6">
-      <table className="w-full text-sm text-right">
-        <thead className="border-b-2 border-slate-200/80 dark:border-slate-700/80">
-          <tr>
-            {headers.map(header => <th key={header} className="p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{header}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index} className="border-b border-slate-200/50 dark:border-slate-700/50 last:border-b-0 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors">
-              <td className="p-4 whitespace-nowrap">{row.thickness}</td>
-              <td className="p-4 whitespace-nowrap">{row.width}</td>
-              <td className="p-4 font-semibold whitespace-nowrap">{row.price}</td>
-              <td className={`p-4 whitespace-nowrap font-semibold ${row.changeType === 'up' ? 'text-emerald-500' : 'text-red-500'}`}>{row.change}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </Card>
-);
 const PricesPage: React.FC = () => {
-  const hotRolled: ProductRow[] = [
-    { thickness: 'ضخامت 2mm', width: 1250, price: '41,800', change: '+0.5%', changeType: 'up' },
-    { thickness: 'ضخامت 3mm', width: 1500, price: '42,000', change: '+0.6%', changeType: 'up' },
-    { thickness: 'ضخامت 5mm', width: 1500, price: '42,100', change: '+0.7%', changeType: 'up' },
-    { thickness: 'ضخامت 8mm', width: 1500, price: '42,250', change: '+0.7%', changeType: 'up' },
-    { thickness: 'ضخامت 10mm', width: 1500, price: '42,300', change: '+0.8%', changeType: 'up' },
-  ];
-  const hotCoils: ProductRow[] = [
-      { thickness: 'ضخامت 2mm', width: 'عرض 1000', price: '41,700', change: '+0.4%', changeType: 'up' },
-      { thickness: 'ضخامت 2.5mm', width: 'عرض 1250', price: '41,650', change: '+0.4%', changeType: 'up' },
-      { thickness: 'ضخامت 4mm', width: 'عرض 1500', price: '41,850', change: '+0.5%', changeType: 'up' },
-  ];
-  const coldRolled: ProductRow[] = [
-    { thickness: 'ضخامت 0.5mm', width: 1000, price: '48,200', change: '+1.5%', changeType: 'up' },
-    { thickness: 'ضخامت 0.7mm', width: 1250, price: '47,900', change: '+1.3%', changeType: 'up' },
-    { thickness: 'ضخامت 0.9mm', width: 1250, price: '47,750', change: '+1.1%', changeType: 'up' },
-    { thickness: 'ضخامت 1mm', width: 1250, price: '47,600', change: '+1.0%', changeType: 'up' },
-  ];
-  const galvanized: ProductRow[] = [
-    { thickness: 'ضخامت 0.5mm', width: 1250, price: '53,100', change: '+1.2%', changeType: 'up' },
-    { thickness: 'ضخامت 0.8mm', width: 1250, price: '52,800', change: '+1.0%', changeType: 'up' },
-    { thickness: 'ضخامت 1mm', width: 1250, price: '52,500', change: '+0.9%', changeType: 'up' },
-  ];
-  const iBeam: ProductRow[] = [
-    { thickness: 'سایز 14', width: '12m', price: '39,800', change: '+0.5%', changeType: 'up' },
-    { thickness: 'سایز 16', width: '12m', price: '39,950', change: '+0.6%', changeType: 'up' },
-    { thickness: 'سایز 18', width: '12m', price: '40,100', change: '+0.7%', changeType: 'up' },
-    { thickness: 'سایز 20', width: '12m', price: '40,500', change: '+0.8%', changeType: 'up' },
-  ];
-  const rebars: ProductRow[] = [
-      { thickness: 'سایز 12', width: 'A3', price: '25,450', change: '+0.4%', changeType: 'up' },
-      { thickness: 'سایز 14', width: 'A3', price: '25,150', change: '+0.6%', changeType: 'up' },
-      { thickness: 'سایز 16', width: 'A3', price: '25,150', change: '+0.6%', changeType: 'up' },
-      { thickness: 'سایز 18', width: 'A3', price: '25,200', change: '+0.8%', changeType: 'up' },
-      { thickness: 'سایز 20', width: 'A3', price: '25,200', change: '+0.8%', changeType: 'up' },
-      { thickness: 'سایز 22', width: 'A3', price: '25,300', change: '+0.9%', changeType: 'up' },
-  ];
+    const { productsData, isLoading } = useMarketData();
+
+    const tables = [
+        { key: 'rebars', title: 'میلگرد (Rebar)', headers: ['سایز', 'استاندارد', 'قیمت', 'تغییر'] },
+        { key: 'i-beam', title: 'تیرآهن (I-Beam)', headers: ['سایز', 'طول شاخه', 'قیمت', 'تغییر'] },
+        { key: 'hot-rolled', title: 'ورق گرم (Hot Rolled Sheet)', headers: ['ضخامت', 'عرض', 'قیمت', 'تغییر'] },
+        { key: 'cold-rolled', title: 'ورق سرد (Cold Rolled Sheet)', headers: ['ضخامت', 'عرض', 'قیمت', 'تغییر'] },
+        { key: 'galvanized', title: 'ورق گالوانیزه (Galvanized Sheet)', headers: ['ضخامت', 'عرض', 'قیمت', 'تغییر'] },
+    ];
+    
+    const ProductTable: React.FC<{ title: string; rows: ProductPriceRow[]; headers?: string[]; lastChange: number; }> = ({ title, rows, headers = ['مشخصات', 'عرض / استاندارد', 'قیمت', 'تغییر'], lastChange }) => {
+        const changeType = lastChange >= 0 ? 'up' : 'down';
+        const changeFormatted = `${lastChange > 0 ? '+' : ''}${lastChange.toFixed(1)}%`;
+
+        return (
+          <Card className="mb-8 last:mb-0">
+            <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-xl border-r-4 border-indigo-500 pr-4">{title}</h4>
+            <div className="overflow-x-auto -mx-4 sm:-mx-6">
+              <table className="w-full text-sm text-right">
+                <thead className="border-b-2 border-slate-200/80 dark:border-slate-700/80">
+                  <tr>
+                    {headers.map(header => <th key={header} className="p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{header}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => (
+                    <tr key={index} className="border-b border-slate-200/50 dark:border-slate-700/50 last:border-b-0 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors">
+                      <td className="p-4 whitespace-nowrap">{row.spec}</td>
+                      <td className="p-4 whitespace-nowrap">{row.dimension}</td>
+                      <td className="p-4 font-semibold whitespace-nowrap">{row.price.toLocaleString('fa-IR')}</td>
+                      <td className={`p-4 whitespace-nowrap font-semibold ${changeType === 'up' ? 'text-emerald-500' : 'text-red-500'}`}>{changeFormatted}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        );
+    };
 
   return (
     <div className="animate-fadeIn">
       <Header title="قیمت‌ها" />
-      <main className="py-6 space-y-6">
-          <ProductTable title="میلگرد (Rebar)" rows={rebars} headers={['سایز', 'استاندارد', 'قیمت', 'تغییر']} />
-          <ProductTable title="تیرآهن (I-Beam)" rows={iBeam} headers={['سایز', 'طول شاخه', 'قیمت', 'تغییر']} />
-          <ProductTable title="ورق گرم (Hot Rolled Sheet)" rows={hotRolled} headers={['ضخامت', 'عرض', 'قیمت', 'تغییر']} />
-          <ProductTable title="کلاف گرم (Hot Rolled Coil)" rows={hotCoils} headers={['ضخامت', 'مشخصات', 'قیمت', 'تغییر']} />
-          <ProductTable title="ورق سرد (Cold Rolled Sheet)" rows={coldRolled} headers={['ضخامت', 'عرض', 'قیمت', 'تغییر']} />
-          <ProductTable title="ورق گالوانیزه (Galvanized Sheet)" rows={galvanized} headers={['ضخامت', 'عرض', 'قیمت', 'تغییر']} />
-
+      <main className="py-6 space-y-6 relative">
+          {isLoading && (
+            <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm flex justify-center items-center z-30 rounded-2xl pt-20">
+                <div className="w-8 h-8 border-4 border-slate-300 dark:border-slate-600 border-t-indigo-500 rounded-full animate-spin"></div>
+            </div>
+          )}
+          {tables.map(tableInfo => {
+              const product = productsData[tableInfo.key];
+              if (!product || !product.detailedPrices) return null;
+              return (
+                <ProductTable 
+                    key={tableInfo.key}
+                    title={tableInfo.title}
+                    rows={product.detailedPrices}
+                    headers={tableInfo.headers}
+                    lastChange={product.change}
+                />
+              )
+          })}
            <div className="text-center text-xs text-slate-500 dark:text-slate-400 pt-4">
-                منبع قیمت‌ها: شبکه اطلاع‌رسانی آهن و فولاد ایران (بروزرسانی در لحظه)
+                منبع قیمت‌ها: شبکه اطلاع‌رسانی آهن و فولاد ایران (بروزرسانی شبیه‌سازی شده)
             </div>
       </main>
     </div>
   );
 };
+
 
 // --- BUNDLED FROM pages/NewsPage.tsx ---
 const ARTICLES_PER_PAGE = 5;
@@ -2203,14 +2551,7 @@ const timeSince = (date: Date): string => {
   if (interval > 1) return Math.floor(interval) + " دقیقه پیش";
   return "همین حالا";
 };
-interface NewsArticleItemProps {
-  article: Article;
-  viewMode: 'list' | 'card';
-  isBookmarked: boolean;
-  onToggleBookmark: (id: number) => void;
-  onShare: (article: Article) => void;
-}
-const NewsArticleItem: React.FC<NewsArticleItemProps> = memo(({ article, viewMode, isBookmarked, onToggleBookmark, onShare }) => {
+const NewsArticleItem: React.FC<{ article: Article; viewMode: 'list' | 'card'; isBookmarked: boolean; onToggleBookmark: (id: number) => void; onShare: (article: Article) => void; }> = React.memo(({ article, viewMode, isBookmarked, onToggleBookmark, onShare }) => {
     const { id, title, summary, source, credibility, publishedAt, category } = article;
     const categoryStyle = categoryInfo[category].color;
     const cred = credibilityMap[credibility];
@@ -2262,7 +2603,14 @@ const NewsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [filters, setFilters] = useState<{ category: NewsCategory | 'all'; country: NewsCountry; type: NewsType; time: NewsTimeFilter; }>({ category: 'all', country: 'all', type: 'all', time: 'all' });
+
+  const [filters, setFilters] = useState<{
+      category: NewsCategory | 'all';
+      country: NewsCountry;
+      type: NewsType;
+      time: NewsTimeFilter;
+  }>({ category: 'all', country: 'all', type: 'all', time: 'all' });
+  
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<number>>(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('bookmarkedNews') : null;
     try {
@@ -2279,7 +2627,7 @@ const NewsPage: React.FC = () => {
   useEffect(() => {
       const interval = setInterval(() => {
           setLastUpdated(new Date());
-      }, 15 * 60 * 1000); // 15 minutes
+      }, 15 * 60 * 1000);
       return () => clearInterval(interval);
   }, []);
 
@@ -2307,7 +2655,7 @@ const NewsPage: React.FC = () => {
             '7d': 7 * 24 * 60 * 60 * 1000,
             '30d': 30 * 24 * 60 * 60 * 1000,
         };
-        articles = articles.filter(a => (now - a.publishedAt.getTime()) < timeLimits[filters.time]);
+        articles = articles.filter(a => (now - a.publishedAt.getTime()) < timeLimits[filters.time as keyof typeof timeLimits]);
     }
     if (searchTerm) {
       articles = articles.filter(a =>
@@ -2342,7 +2690,7 @@ const NewsPage: React.FC = () => {
               await navigator.share({
                   title: article.title,
                   text: article.summary,
-                  url: window.location.href, 
+                  url: window.location.href,
               });
           } catch (error) {
               console.error('Error sharing:', error);
@@ -2425,6 +2773,7 @@ const NewsPage: React.FC = () => {
     </div>
   );
 };
+
 
 // --- BUNDLED FROM pages/PremiumAnalysisPage.tsx ---
 const reportTypeInfo: Record<ReportType, { name: string; color: string; icon: string; }> = {
@@ -2615,7 +2964,7 @@ const PremiumAnalysisPage: React.FC = () => {
 
     const handleSelectReport = (id: number) => {
         setSelectedReportId(id);
-        window.scrollTo(0, 0); 
+        window.scrollTo(0, 0);
     };
 
     const handleBack = () => {
@@ -2648,11 +2997,8 @@ const PremiumAnalysisPage: React.FC = () => {
     );
 };
 
+
 // --- BUNDLED FROM pages/PredictionPage.tsx ---
-const productOptions = Object.keys(predictionData).map(key => ({
-    value: key,
-    label: productsData[key].title
-}));
 const allFlatProducts = {
     'hot-rolled': 'ورق گرم',
     'cold-rolled': 'ورق سرد',
@@ -2660,17 +3006,20 @@ const allFlatProducts = {
     'slab': 'اسلب',
     'rebars': 'میلگرد'
 };
-const allProductOptions = Object.entries(allFlatProducts)
-    .filter(([key]) => predictionData[key])
-    .map(([value, label]) => ({ value, label }));
-
-const InfoCard: React.FC<{ icon: string; title: string; children: React.ReactNode; iconColor?: string }> = ({ icon, title, children, iconColor = 'text-indigo-500' }) => (
-    <Card>
-        <h3 className={`font-bold text-lg mb-4 flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-700/60 pb-3`}>
-            <i className={`fas ${icon} ${iconColor}`}></i>
-            <span>{title}</span>
-        </h3>
-        {children}
+const InfoCard: React.FC<{ icon: string; title: string; children: React.ReactNode; iconColor?: string, isLoading?: boolean }> = ({ icon, title, children, iconColor = 'text-indigo-500', isLoading = false }) => (
+    <Card className="relative">
+        {isLoading && (
+             <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm flex justify-center items-center z-30 rounded-2xl">
+                <div className="w-8 h-8 border-4 border-slate-300 dark:border-slate-600 border-t-indigo-500 rounded-full animate-spin"></div>
+            </div>
+        )}
+        <div className={isLoading ? 'blur-sm' : ''}>
+            <h3 className={`font-bold text-lg mb-4 flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-700/60 pb-3`}>
+                <i className={`fas ${icon} ${iconColor}`}></i>
+                <span>{title}</span>
+            </h3>
+            {children}
+        </div>
     </Card>
 );
 type Algorithm = 'hybrid' | 'lstm' | 'linear';
@@ -2682,6 +3031,7 @@ const TypingIndicator: React.FC = () => (
     </div>
 );
 const PredictionPage: React.FC = () => {
+    const { productsData, predictionData, isLoading } = useMarketData();
     const [selectedProduct, setSelectedProduct] = useState<string>('hot-rolled');
     const [selectedHorizon, setSelectedHorizon] = useState<number>(7);
     const [whatIfInputs, setWhatIfInputs] = useState<WhatIfData>(whatIfInitialData);
@@ -2693,6 +3043,10 @@ const PredictionPage: React.FC = () => {
     const [userInput, setUserInput] = useState('');
     const [isAiThinking, setIsAiThinking] = useState(false);
     const chatContainerRef = useRef<HTMLDivElement>(null);
+
+    const allProductOptions = useMemo(() => Object.entries(allFlatProducts)
+        .filter(([key]) => predictionData[key])
+        .map(([value, label]) => ({ value, label })), [predictionData]);
 
     useEffect(() => {
         const initializeChat = async () => {
@@ -2740,7 +3094,7 @@ const PredictionPage: React.FC = () => {
 
     const predictionResult = useMemo(() => {
         return predictionData[selectedProduct]?.[selectedHorizon] || Object.values(Object.values(predictionData)[0])[0];
-    }, [selectedProduct, selectedHorizon]);
+    }, [selectedProduct, selectedHorizon, predictionData]);
 
     const handleWhatIfChange = useCallback((id: keyof WhatIfData, value: number) => {
         setWhatIfInputs(prev => ({ ...prev, [id]: { ...prev[id], value } }));
@@ -2842,7 +3196,8 @@ const PredictionPage: React.FC = () => {
                 </Card>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2">
-                        <Card>
+                        <Card className="relative">
+                             {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10 rounded-2xl"></div>}
                              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-1 text-lg">پیش‌بینی قیمت {productsData[selectedProduct].title} ({selectedHorizon} روزه)</h3>
                              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                                 قیمت نهایی: <span className={`font-bold ${changeType === 'up' ? 'text-emerald-500' : 'text-red-500'}`}>{finalPredictedPrice.toLocaleString('fa-IR')} تومان</span> 
@@ -2855,13 +3210,13 @@ const PredictionPage: React.FC = () => {
                         </Card>
                     </div>
                     <div>
-                         <InfoCard icon="fa-bullseye" title="امتیاز دقت پیش‌بینی" iconColor="text-amber-500">
+                         <InfoCard icon="fa-bullseye" title="امتیاز دقت پیش‌بینی" iconColor="text-amber-500" isLoading={isLoading}>
                              <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">بر اساس عملکرد مدل در ۳۰ روز گذشته</p>
                              <GaugeChart value={predictionResult.accuracy} color={predictionResult.accuracy > 85 ? '#10b981' : predictionResult.accuracy > 75 ? '#f59e0b' : '#ef4444'} />
                          </InfoCard>
                     </div>
                 </div>
-                <InfoCard icon="fa-cogs" title="تنظیمات مدل پیش‌بینی" iconColor="text-slate-500">
+                <InfoCard icon="fa-cogs" title="تنظیمات مدل پیش‌بینی" iconColor="text-slate-500" isLoading={isLoading}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                         <div>
                              <h4 className="font-semibold mb-3 text-slate-700 dark:text-slate-300">وزن‌دهی به عوامل</h4>
@@ -2894,7 +3249,7 @@ const PredictionPage: React.FC = () => {
                         </div>
                     </div>
                 </InfoCard>
-                <InfoCard icon="fa-sliders-h" title="شبیه‌ساز «اگر-چه؟» (What-If?)" iconColor="text-purple-500">
+                <InfoCard icon="fa-sliders-h" title="شبیه‌ساز «اگر-چه؟» (What-If?)" iconColor="text-purple-500" isLoading={isLoading}>
                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
                          با حرکت دادن اسلایدرها، تأثیر لحظه‌ای هر متغیر بر قیمت نهایی را مشاهده کنید. این تحلیل حساسیت به شما کمک می‌کند تا درک بهتری از ریسک‌ها و فرصت‌های بازار داشته باشید.
                      </p>
@@ -2925,7 +3280,7 @@ const PredictionPage: React.FC = () => {
                          })}
                      </div>
                 </InfoCard>
-                <InfoCard icon="fa-lightbulb" title="عوامل اصلی تاثیرگذار (Explainable AI)" iconColor="text-emerald-500">
+                <InfoCard icon="fa-lightbulb" title="عوامل اصلی تاثیرگذار (Explainable AI)" iconColor="text-emerald-500" isLoading={isLoading}>
                     <div className="space-y-4 text-sm">
                         {predictionResult.factors.map(factor => (
                             <div key={factor.name} className="bg-slate-100/70 dark:bg-slate-800/70 p-4 rounded-lg">
@@ -2938,7 +3293,7 @@ const PredictionPage: React.FC = () => {
                         ))}
                     </div>
                 </InfoCard>
-                 <InfoCard icon="fa-sitemap" title="تحلیل سناریو" iconColor="text-sky-500">
+                 <InfoCard icon="fa-sitemap" title="تحلیل سناریو" iconColor="text-sky-500" isLoading={isLoading}>
                     <ul className="space-y-4 text-sm">
                         {predictionResult.scenarios.map(scenario => (
                              <li key={scenario.condition} className="bg-slate-100/70 dark:bg-slate-800/70 p-4 rounded-lg">
@@ -3014,137 +3369,46 @@ const PredictionPage: React.FC = () => {
     );
 };
 
-// --- BUNDLED FROM pages/ResumePage.tsx ---
-const ResumeSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <section className="mb-8">
-    <h3 className="text-xl font-bold border-r-4 border-indigo-500 pr-3 mb-4 text-slate-800 dark:text-slate-200">{title}</h3>
-    <ul className="space-y-3">{children}</ul>
-  </section>
-);
-const ResumeListItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <li className="flex items-start">
-    <i className="fas fa-check-circle text-indigo-400 mt-1.5 ml-3 flex-shrink-0"></i>
-    <span>{children}</span>
-  </li>
-);
-const ResumeSkill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <li className="flex items-start">
-      <i className="fas fa-star text-amber-400 mt-1.5 ml-3 flex-shrink-0"></i>
-      <span>{children}</span>
-    </li>
-);
-const ResumePage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
-  const handlePrint = () => window.print();
-
-  return (
-    <div className="animate-fadeIn mt-6 mb-6">
-        <div className="p-4 sm:p-8 bg-white dark:bg-slate-900/70 rounded-2xl shadow-2xl relative print:shadow-none print:p-0 print:m-0">
-            <style>{`
-                @media print {
-                body { background-color: #fff !important; }
-                html, body { font-size: 10pt; }
-                .no-print { display: none !important; }
-                .print-break-before { page-break-before: always; }
-                .dark .print-dark-hidden { display: none; }
-                .dark body { color: #000 !important; }
-                .dark h1, .dark h2, .dark h3, .dark span, .dark p, .dark li { color: #000 !important; }
-                .dark section { border-color: #000 !important; }
-                }
-            `}</style>
-            <div className="absolute top-4 right-4 flex gap-2 no-print">
-                <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold transition-colors">
-                    <i className="fas fa-arrow-right"></i>
-                    <span>بازگشت</span>
-                </button>
-                <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm hover:bg-indigo-700 transition-colors">
-                    <i className="fas fa-print"></i>
-                    <span>چاپ / ذخیره PDF</span>
-                </button>
-            </div>
-            
-            <div className="resume-container max-w-4xl mx-auto text-slate-800 dark:text-slate-300">
-                <div>
-                <header className="flex flex-col sm:flex-row justify-between items-center border-b-2 border-dashed pb-4 mb-6">
-                    <div className="text-center sm:text-right order-2 sm:order-1">
-                        <h1 className="text-4xl font-extrabold text-slate-900 dark:text-slate-100">علی ثابت</h1>
-                        <p className="mt-2 font-semibold">تلفن : ۰۹۱۲۶۲۶۵۵۰۸</p>
-                        <p className="font-semibold">ایمیل : Dr.alisabett@gmail.com</p>
-                    </div>
-                    <div className="w-32 h-32 rounded-full mb-4 sm:mb-0 order-1 sm:order-2 bg-slate-200 dark:bg-slate-700 flex items-center justify-center shadow-md">
-                        <i className="fas fa-user-tie text-6xl text-indigo-500 dark:text-indigo-400"></i>
-                    </div>
-                </header>
-                
-                <ResumeSection title="خلاصه تجربیات">
-                    <ResumeListItem>بیش از ۲۰ سال سابقه فعالیت در بازارهای کالایی ایران و جهان، با تمرکز ویژه بر صنعت فولاد.</ResumeListItem>
-                    <ResumeListItem>تحلیلگر ارشد و استراتژیست بازار، مسلط بر تحلیل‌های بنیادی و تکنیکال.</ResumeListItem>
-                    <ResumeListItem>دارای دکترای اقتصاد با گرایش بازارهای مالی و کالایی.</ResumeListItem>
-                    <ResumeListItem>مدرس دوره‌های تخصصی تحلیل بازار فولاد و مدیریت ریسک در بورس کالا.</ResumeListItem>
-                </ResumeSection>
-                <ResumeSection title="سوابق تحصیلی">
-                    <ResumeListItem><strong>دکترای اقتصاد:</strong> دانشگاه تهران، با رساله "تحلیل نوسانات قیمت در زنجیره ارزش فولاد ایران"</ResumeListItem>
-                    <ResumeListItem><strong>کارشناسی ارشد مدیریت بازرگانی (MBA):</strong> دانشگاه صنعتی شریف</ResumeListItem>
-                    <ResumeListItem><strong>کارشناسی مهندسی مواد - متالورژی صنعتی:</strong> دانشگاه علم و صنعت ایران</ResumeListItem>
-                </ResumeSection>
-                <ResumeSection title="سوابق اجرایی و مدیریتی">
-                    <ResumeListItem><strong>مدیرعامل و عضو هیئت مدیره شرکت سرمایه‌گذاری آتیه فولاد نقش جهان</strong> (۱۳۹۹ - تاکنون)</ResumeListItem>
-                    <ResumeListItem><strong>معاون بازرگانی شرکت فولاد مبارکه اصفهان</strong> (۱۳۹۵ - ۱۳۹۹)</ResumeListItem>
-                    <ResumeListItem><strong>مدیر فروش داخلی و صادرات شرکت فولاد خوزستان</strong> (۱۳۹۰ - ۱۳۹۵)</ResumeListItem>
-                    <ResumeListItem><strong>کارشناس و تحلیلگر ارشد بورس کالای ایران</strong> (۱۳۸۶ - ۱۳۹۰)</ResumeListItem>
-                </ResumeSection>
-                </div>
-                <div className="print-break-before">
-                <ResumeSection title="مهارت‌های تخصصی">
-                    <ResumeSkill>تحلیل بنیادی (Fundamental Analysis) زنجیره فولاد (سنگ آهن، قراضه، محصولات نهایی)</ResumeSkill>
-                    <ResumeSkill>تحلیل تکنیکال (Technical Analysis) پیشرفته و الگوهای قیمتی</ResumeSkill>
-                    <ResumeSkill>مدیریت ریسک و ابزارهای پوشش ریسک (قراردادهای آتی و اختیار معامله)</ResumeSkill>
-                    <ResumeSkill>آشنایی کامل با بازارهای LME, SHFE و Platts</ResumeSkill>
-                    <ResumeSkill>اقتصاد کلان و تأثیر آن بر بازارهای کالایی</ResumeSkill>
-                    <ResumeSkill>اصول بازاریابی، فروش و توسعه بازارهای صادراتی</ResumeSkill>
-                </ResumeSection>
-                <ResumeSection title="دستاوردها و افتخارات">
-                    <ResumeListItem>افزایش سهم بازار صادراتی فولاد مبارکه به میزان ۳۰٪ در دوران تصدی معاونت بازرگانی.</ResumeListItem>
-                    <ResumeListItem>طراحی و پیاده‌سازی سیستم نوین قیمت‌گذاری محصولات فولادی در بورس کالا.</ResumeListItem>
-                    <ResumeListItem>کسب عنوان "تحلیلگر برتر کالایی" از جشنواره بورس ایران (سه دوره).</ResumeListItem>
-                    <ResumeListItem>چاپ بیش از ۱۰ مقاله علمی-پژوهشی در مجلات معتبر اقتصادی و متالورژی.</ResumeListItem>
-                </ResumeSection>
-                <ResumeSection title="دوره‌ها و گواهینامه‌های بین‌المللی">
-                    <ResumeListItem>گواهینامه تحلیلگری بازارهای کالایی از موسسه LME Education لندن</ResumeListItem>
-                    <ResumeListItem>دوره پیشرفته مدیریت استراتژیک از دانشگاه INSEAD فرانسه</ResumeListItem>
-                    <ResumeListItem>گواهینامه اصول مدیریت پروژه (PMP)</ResumeListItem>
-                </ResumeSection>
-                </div>
-            </div>
-        </div>
-    </div>
-  );
-};
 
 // --- BUNDLED FROM App.tsx ---
 function App() {
   const [activePage, setActivePage] = useState<Page>(Page.DASHBOARD);
   const [isAuthorModalOpen, setIsAuthorModalOpen] = useState(false);
   const [showResume, setShowResume] = useState(false);
+
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
         const storedTheme = localStorage.getItem('theme');
-        if (storedTheme) return storedTheme as Theme;
-        if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+        if (storedTheme) {
+            return storedTheme as Theme;
+        }
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+        }
     }
     return 'light';
   });
   
-  useEffect(() => {
+  React.useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('theme', theme);
   }, [theme]);
 
+
   const toggleTheme = useCallback(() => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+    setTheme(prevTheme => {
+        const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+        localStorage.setItem('theme', newTheme);
+        if (newTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        return newTheme;
+    });
   }, []);
 
   const themeValue = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
@@ -3159,57 +3423,67 @@ function App() {
 
   const renderPage = () => {
     switch (activePage) {
-      case Page.DASHBOARD: return <DashboardPage />;
-      case Page.ANALYSIS: return <AnalysisPage />;
-      case Page.PRICES: return <PricesPage />;
-      case Page.NEWS: return <NewsPage />;
-      case Page.PREMIUM_ANALYSIS: return <PremiumAnalysisPage />;
-      case Page.PREDICTION: return <PredictionPage />;
-      default: return <DashboardPage />;
+      case Page.DASHBOARD:
+        return <DashboardPage />;
+      case Page.ANALYSIS:
+        return <AnalysisPage />;
+      case Page.PRICES:
+        return <PricesPage />;
+      case Page.NEWS:
+        return <NewsPage />;
+      case Page.PREMIUM_ANALYSIS:
+        return <PremiumAnalysisPage />;
+      case Page.PREDICTION:
+        return <PredictionPage />;
+      default:
+        return <DashboardPage />;
     }
   };
 
   return (
     <ThemeContext.Provider value={themeValue}>
-      <div className="antialiased text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300 bg-transparent">
-        <div className="max-w-4xl mx-auto px-4 pb-28">
-            {showResume ? (
-              <ResumePage onBack={handleHideResume} />
-            ) : (
-              <>
-                {renderPage()}
-                 <footer className="text-center text-xs text-slate-500/80 dark:text-slate-400/80 mt-10 py-4">
-                    طراحی و توسعه توسط{' '}
-                    <button onClick={handleOpenAuthorModal} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline focus:outline-none">
-                        علی ثابت
-                    </button>
-                </footer>
-              </>
-            )}
+      <MarketDataProvider>
+        <div className="antialiased text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300 bg-transparent">
+          <div className="max-w-4xl mx-auto px-4 pb-28">
+              {showResume ? (
+                <ResumePage onBack={handleHideResume} />
+              ) : (
+                <>
+                  {renderPage()}
+                  <footer className="text-center text-xs text-slate-500/80 dark:text-slate-400/80 mt-10 py-4">
+                      طراحی و توسعه توسط{' '}
+                      <button onClick={handleOpenAuthorModal} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline focus:outline-none">
+                          علی ثابت
+                      </button>
+                  </footer>
+                </>
+              )}
+          </div>
+          {!showResume && (
+            <>
+              <BottomNav activePage={activePage} setPage={setActivePage} />
+              <ThemeToggle />
+            </>
+          )}
         </div>
-        {!showResume && (
-          <>
-            <BottomNav activePage={activePage} setPage={setActivePage} />
-            <ThemeToggle />
-          </>
-        )}
-      </div>
-      <Modal isOpen={isAuthorModalOpen} onClose={handleCloseAuthorModal}>
-        <AuthorInfo onShowResume={handleShowResume} />
-      </Modal>
+        <Modal isOpen={isAuthorModalOpen} onClose={handleCloseAuthorModal}>
+          <AuthorInfo onShowResume={handleShowResume} />
+        </Modal>
+      </MarketDataProvider>
     </ThemeContext.Provider>
   );
 }
 
-// --- BUNDLED FROM index.tsx (original) ---
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+// --- RENDER APPLICATION ---
+const rootElement = document.getElementById('root');
+if (rootElement) {
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+        <React.StrictMode>
+            <App />
+        </React.StrictMode>
+    );
+} else {
+    console.error('Failed to find the root element with ID "root".');
+}

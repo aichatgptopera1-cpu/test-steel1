@@ -2,38 +2,34 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Header from '../components/Header.tsx';
 import Card from '../components/Card.tsx';
 import { PredictionChart, GaugeChart } from '../components/Charts.tsx';
-import { predictionData, whatIfInitialData } from '../data/prediction.ts';
-import { productsData } from '../data.ts';
-import { PredictionDataPoint, WhatIfVariable, WhatIfData, ChatMessage } from '../types.ts';
+import { whatIfInitialData } from '../data/prediction.ts';
+import { PredictionDataPoint, WhatIfData, ChatMessage } from '../types.ts';
 import ErrorBoundary from '../components/ErrorBoundary.tsx';
 import { GoogleGenAI, Chat } from '@google/genai';
+import { useMarketData } from '../contexts/MarketDataContext.tsx';
 
-const productOptions = Object.keys(predictionData).map(key => ({
-    value: key,
-    label: productsData[key].title
-}));
-
-// Manually add other flat products to the list if they are not in predictionData
 const allFlatProducts = {
     'hot-rolled': 'ورق گرم',
     'cold-rolled': 'ورق سرد',
     'galvanized': 'ورق گالوانیزه',
     'slab': 'اسلب',
-    'rebars': 'میلگرد' // Keep rebar as well
+    'rebars': 'میلگرد'
 };
 
-const allProductOptions = Object.entries(allFlatProducts)
-    .filter(([key]) => predictionData[key]) // Ensure only products with prediction data are shown
-    .map(([value, label]) => ({ value, label }));
-
-
-const InfoCard: React.FC<{ icon: string; title: string; children: React.ReactNode; iconColor?: string }> = ({ icon, title, children, iconColor = 'text-indigo-500' }) => (
-    <Card>
-        <h3 className={`font-bold text-lg mb-4 flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-700/60 pb-3`}>
-            <i className={`fas ${icon} ${iconColor}`}></i>
-            <span>{title}</span>
-        </h3>
-        {children}
+const InfoCard: React.FC<{ icon: string; title: string; children: React.ReactNode; iconColor?: string, isLoading?: boolean }> = ({ icon, title, children, iconColor = 'text-indigo-500', isLoading = false }) => (
+    <Card className="relative">
+        {isLoading && (
+             <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm flex justify-center items-center z-30 rounded-2xl">
+                <div className="w-8 h-8 border-4 border-slate-300 dark:border-slate-600 border-t-indigo-500 rounded-full animate-spin"></div>
+            </div>
+        )}
+        <div className={isLoading ? 'blur-sm' : ''}>
+            <h3 className={`font-bold text-lg mb-4 flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-700/60 pb-3`}>
+                <i className={`fas ${icon} ${iconColor}`}></i>
+                <span>{title}</span>
+            </h3>
+            {children}
+        </div>
     </Card>
 );
 
@@ -48,33 +44,25 @@ const TypingIndicator: React.FC = () => (
 );
 
 const PredictionPage: React.FC = () => {
+    const { productsData, predictionData, isLoading } = useMarketData();
     const [selectedProduct, setSelectedProduct] = useState<string>('hot-rolled');
     const [selectedHorizon, setSelectedHorizon] = useState<number>(7);
     const [whatIfInputs, setWhatIfInputs] = useState<WhatIfData>(whatIfInitialData);
     const [simulatedForecast, setSimulatedForecast] = useState<PredictionDataPoint[] | null>(null);
-    
-    // Model settings state
-    const [modelWeights, setModelWeights] = useState({
-        dollar: 0.40,
-        oil: 0.10,
-        ironOre: 0.35,
-        cokingCoal: 0.15
-    });
+    const [modelWeights, setModelWeights] = useState({ dollar: 0.40, oil: 0.10, ironOre: 0.35, cokingCoal: 0.15 });
     const [algorithm, setAlgorithm] = useState<Algorithm>('hybrid');
-
-    // Chat state
     const [chat, setChat] = useState<Chat | null>(null);
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
     const [isAiThinking, setIsAiThinking] = useState(false);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
+    const allProductOptions = useMemo(() => Object.entries(allFlatProducts)
+        .filter(([key]) => predictionData[key])
+        .map(([value, label]) => ({ value, label })), [predictionData]);
+
     useEffect(() => {
         const initializeChat = async () => {
-            // FIX: The `process` object does not exist in browser environments. 
-            // We must check for its existence to prevent a runtime crash.
-            // The Gemini chat feature will be disabled if the API key is not available
-            // through a proper build process that defines environment variables.
             if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
                 try {
                     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -86,7 +74,6 @@ const PredictionPage: React.FC = () => {
                         },
                     });
                     setChat(newChat);
-                     // Initial welcome message from AI
                     setChatMessages([{
                         id: Date.now(),
                         sender: 'ai',
@@ -101,7 +88,6 @@ const PredictionPage: React.FC = () => {
                     }]);
                 }
             } else {
-                // Handle the case where API_KEY is not available
                 console.warn("Gemini API key is not available. Chat feature is disabled.");
                 setChatMessages([{
                     id: Date.now(),
@@ -114,32 +100,23 @@ const PredictionPage: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        // Auto-scroll chat to the bottom
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [chatMessages]);
 
-
     const predictionResult = useMemo(() => {
         return predictionData[selectedProduct]?.[selectedHorizon] || Object.values(Object.values(predictionData)[0])[0];
-    }, [selectedProduct, selectedHorizon]);
+    }, [selectedProduct, selectedHorizon, predictionData]);
 
     const handleWhatIfChange = useCallback((id: keyof WhatIfData, value: number) => {
-        setWhatIfInputs(prev => ({
-            ...prev,
-            [id]: { ...prev[id], value }
-        }));
+        setWhatIfInputs(prev => ({ ...prev, [id]: { ...prev[id], value } }));
     }, []);
 
     const handleWeightChange = useCallback((id: keyof typeof modelWeights, value: number) => {
-        setModelWeights(prev => ({
-            ...prev,
-            [id]: value
-        }));
+        setModelWeights(prev => ({ ...prev, [id]: value }));
     }, []);
 
-    // Effect to run simulation when inputs change
     useEffect(() => {
         const initialDollar = whatIfInitialData.dollar.value;
         const initialOil = whatIfInitialData.oil.value;
@@ -151,15 +128,10 @@ const PredictionPage: React.FC = () => {
         const ironOreChange = (whatIfInputs.ironOre.value - initialIronOre) / initialIronOre;
         const cokingCoalChange = (whatIfInputs.cokingCoal.value - initialCokingCoal) / initialCokingCoal;
         
-        const baseImpact = (dollarChange * modelWeights.dollar) + 
-                           (oilChange * modelWeights.oil) + 
-                           (ironOreChange * modelWeights.ironOre) + 
-                           (cokingCoalChange * modelWeights.cokingCoal);
-
+        const baseImpact = (dollarChange * modelWeights.dollar) + (oilChange * modelWeights.oil) + (ironOreChange * modelWeights.ironOre) + (cokingCoalChange * modelWeights.cokingCoal);
         let algoModifier = 1.0;
-        if (algorithm === 'lstm') algoModifier = 1.05; // More volatile
-        if (algorithm === 'linear') algoModifier = 0.95; // More conservative
-
+        if (algorithm === 'lstm') algoModifier = 1.05;
+        if (algorithm === 'linear') algoModifier = 0.95;
         const totalImpactFactor = 1 + (baseImpact * algoModifier);
 
         const newForecast = predictionResult.forecast.map(point => ({
@@ -170,7 +142,6 @@ const PredictionPage: React.FC = () => {
         }));
         
         setSimulatedForecast(newForecast);
-
     }, [whatIfInputs, predictionResult, modelWeights, algorithm]);
     
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -187,41 +158,21 @@ const PredictionPage: React.FC = () => {
 
         try {
             const responseStream = await chat.sendMessageStream({ message: trimmedInput });
-
             let aiResponseText = '';
             let finalResponse = null;
-
             for await (const chunk of responseStream) {
                 aiResponseText += chunk.text;
                 finalResponse = chunk;
-                const currentAIMessage: ChatMessage = {
-                    id: aiMessageId,
-                    sender: 'ai',
-                    text: aiResponseText + '▍'
-                };
+                const currentAIMessage: ChatMessage = { id: aiMessageId, sender: 'ai', text: aiResponseText + '▍' };
                 setChatMessages(prev => [...prev.slice(0, -1), currentAIMessage]);
             }
-
             const groundingChunks = finalResponse?.candidates?.[0]?.groundingMetadata?.groundingChunks;
-            const sources = groundingChunks
-                ?.map(chunk => chunk.web)
-                .filter(web => web && web.uri);
-
-            const finalAIMessage: ChatMessage = {
-                id: aiMessageId,
-                sender: 'ai',
-                text: aiResponseText,
-                sources: sources?.length ? sources : undefined,
-            };
+            const sources = groundingChunks?.map(chunk => chunk.web).filter(web => web && web.uri);
+            const finalAIMessage: ChatMessage = { id: aiMessageId, sender: 'ai', text: aiResponseText, sources: sources?.length ? sources : undefined, };
             setChatMessages(prev => [...prev.slice(0, -1), finalAIMessage]);
-
         } catch (error) {
             console.error("Error sending message to Gemini:", error);
-            const errorMessage: ChatMessage = {
-                id: aiMessageId,
-                sender: 'ai',
-                text: 'متاسفانه در پردازش درخواست شما خطایی رخ داد. لطفا دوباره تلاش کنید.',
-            };
+            const errorMessage: ChatMessage = { id: aiMessageId, sender: 'ai', text: 'متاسفانه در پردازش درخواست شما خطایی رخ داد. لطفا دوباره تلاش کنید.', };
             setChatMessages(prev => [...prev.slice(0, -1), errorMessage]);
         } finally {
             setIsAiThinking(false);
@@ -233,18 +184,12 @@ const PredictionPage: React.FC = () => {
     const initialPrice = forecastDisplayData.find(p => p.actual)?.actual || forecastDisplayData[0].mid;
     const priceChangePercent = ((finalPredictedPrice - initialPrice) / initialPrice * 100).toFixed(1);
     const changeType = parseFloat(priceChangePercent) >= 0 ? 'up' : 'down';
-    
-    const algorithmLabels: Record<Algorithm, string> = {
-        hybrid: "مدل ترکیبی (پیش‌فرض)",
-        lstm: "شبکه عصبی LSTM (نوسانی)",
-        linear: "تحلیل خطی (محافظه‌کار)",
-    };
+    const algorithmLabels: Record<Algorithm, string> = { hybrid: "مدل ترکیبی (پیش‌فرض)", lstm: "شبکه عصبی LSTM (نوسانی)", linear: "تحلیل خطی (محافظه‌کار)", };
 
     return (
         <div className="animate-fadeIn">
             <Header title="موتور پیش‌بینی قیمت" />
             <main className="py-6 space-y-6">
-                
                 <Card>
                     <div className="flex flex-col md:flex-row md:items-end gap-4">
                         <div className="flex-1">
@@ -262,10 +207,10 @@ const PredictionPage: React.FC = () => {
                         </div>
                     </div>
                 </Card>
-
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2">
-                        <Card>
+                        <Card className="relative">
+                             {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10 rounded-2xl"></div>}
                              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-1 text-lg">پیش‌بینی قیمت {productsData[selectedProduct].title} ({selectedHorizon} روزه)</h3>
                              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                                 قیمت نهایی: <span className={`font-bold ${changeType === 'up' ? 'text-emerald-500' : 'text-red-500'}`}>{finalPredictedPrice.toLocaleString('fa-IR')} تومان</span> 
@@ -278,14 +223,13 @@ const PredictionPage: React.FC = () => {
                         </Card>
                     </div>
                     <div>
-                         <InfoCard icon="fa-bullseye" title="امتیاز دقت پیش‌بینی" iconColor="text-amber-500">
+                         <InfoCard icon="fa-bullseye" title="امتیاز دقت پیش‌بینی" iconColor="text-amber-500" isLoading={isLoading}>
                              <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">بر اساس عملکرد مدل در ۳۰ روز گذشته</p>
                              <GaugeChart value={predictionResult.accuracy} color={predictionResult.accuracy > 85 ? '#10b981' : predictionResult.accuracy > 75 ? '#f59e0b' : '#ef4444'} />
                          </InfoCard>
                     </div>
                 </div>
-
-                <InfoCard icon="fa-cogs" title="تنظیمات مدل پیش‌بینی" iconColor="text-slate-500">
+                <InfoCard icon="fa-cogs" title="تنظیمات مدل پیش‌بینی" iconColor="text-slate-500" isLoading={isLoading}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                         <div>
                              <h4 className="font-semibold mb-3 text-slate-700 dark:text-slate-300">وزن‌دهی به عوامل</h4>
@@ -318,8 +262,7 @@ const PredictionPage: React.FC = () => {
                         </div>
                     </div>
                 </InfoCard>
-
-                <InfoCard icon="fa-sliders-h" title="شبیه‌ساز «اگر-چه؟» (What-If?)" iconColor="text-purple-500">
+                <InfoCard icon="fa-sliders-h" title="شبیه‌ساز «اگر-چه؟» (What-If?)" iconColor="text-purple-500" isLoading={isLoading}>
                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
                          با حرکت دادن اسلایدرها، تأثیر لحظه‌ای هر متغیر بر قیمت نهایی را مشاهده کنید. این تحلیل حساسیت به شما کمک می‌کند تا درک بهتری از ریسک‌ها و فرصت‌های بازار داشته باشید.
                      </p>
@@ -341,11 +284,7 @@ const PredictionPage: React.FC = () => {
                                     <span className="font-bold">{variable.value.toLocaleString('fa-IR')} {variable.unit}</span>
                                  </div>
                                  <input
-                                     type="range"
-                                     min={variable.min}
-                                     max={variable.max}
-                                     step={variable.step}
-                                     value={variable.value}
+                                     type="range" min={variable.min} max={variable.max} step={variable.step} value={variable.value}
                                      onChange={e => handleWhatIfChange(variable.id, parseFloat(e.target.value))}
                                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                                  />
@@ -354,8 +293,7 @@ const PredictionPage: React.FC = () => {
                          })}
                      </div>
                 </InfoCard>
-
-                <InfoCard icon="fa-lightbulb" title="عوامل اصلی تاثیرگذار (Explainable AI)" iconColor="text-emerald-500">
+                <InfoCard icon="fa-lightbulb" title="عوامل اصلی تاثیرگذار (Explainable AI)" iconColor="text-emerald-500" isLoading={isLoading}>
                     <div className="space-y-4 text-sm">
                         {predictionResult.factors.map(factor => (
                             <div key={factor.name} className="bg-slate-100/70 dark:bg-slate-800/70 p-4 rounded-lg">
@@ -368,8 +306,7 @@ const PredictionPage: React.FC = () => {
                         ))}
                     </div>
                 </InfoCard>
-
-                 <InfoCard icon="fa-sitemap" title="تحلیل سناریو" iconColor="text-sky-500">
+                 <InfoCard icon="fa-sitemap" title="تحلیل سناریو" iconColor="text-sky-500" isLoading={isLoading}>
                     <ul className="space-y-4 text-sm">
                         {predictionResult.scenarios.map(scenario => (
                              <li key={scenario.condition} className="bg-slate-100/70 dark:bg-slate-800/70 p-4 rounded-lg">
@@ -380,7 +317,6 @@ const PredictionPage: React.FC = () => {
                         ))}
                     </ul>
                 </InfoCard>
-                
                 <InfoCard icon="fa-comments" title="مشاوره آنلاین AI" iconColor="text-teal-500">
                     <div className="flex flex-col h-[32rem] bg-slate-100/50 dark:bg-slate-900/50 rounded-2xl overflow-hidden border border-slate-200/80 dark:border-slate-800/80">
                         <div ref={chatContainerRef} className="flex-grow overflow-y-auto p-4 space-y-6">
@@ -426,9 +362,7 @@ const PredictionPage: React.FC = () => {
                         <form onSubmit={handleSendMessage} className="mt-auto p-3 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm border-t border-slate-200/60 dark:border-slate-700/60">
                              <div className="flex items-center gap-2">
                                 <input 
-                                    type="text"
-                                    value={userInput}
-                                    onChange={e => setUserInput(e.target.value)}
+                                    type="text" value={userInput} onChange={e => setUserInput(e.target.value)}
                                     placeholder="مثلا: وضعیت سهام فولاد مبارکه را تحلیل کن"
                                     className="flex-grow py-2.5 px-4 text-sm border-transparent rounded-full bg-slate-100 dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition"
                                     disabled={isAiThinking || !chat}
@@ -443,7 +377,6 @@ const PredictionPage: React.FC = () => {
                         </form>
                     </div>
                 </InfoCard>
-
             </main>
         </div>
     );

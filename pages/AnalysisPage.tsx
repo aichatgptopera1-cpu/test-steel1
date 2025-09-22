@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Header from '../components/Header.tsx';
 import Card from '../components/Card.tsx';
 import { AnalyticsChart, TechnicalAnalysisChart } from '../components/Charts.tsx';
-import { productsData, globalCommoditiesData } from '../data.ts';
-import { ProductData, GlobalCommodityData } from '../types.ts';
+import { ProductData } from '../types.ts';
 import ErrorBoundary from '../components/ErrorBoundary.tsx';
 import { getPastDaysLabels } from '../utils/date.ts';
 import { calculateSMA } from '../utils/chartData.ts';
+import { useMarketData } from '../contexts/MarketDataContext.tsx';
 
 type Tab = 'domestic' | 'international' | 'products-analysis' | 'strategy' | 'technical';
 
@@ -28,7 +28,7 @@ const RsiIndicator: React.FC<{ value: number }> = ({ value }) => {
         <div>
             <div className="flex justify-between items-center mb-1 text-xs font-semibold">
                 <span className="text-slate-600 dark:text-slate-400">{label}</span>
-                <span className="text-slate-800 dark:text-slate-200">{value}</span>
+                <span className="text-slate-800 dark:text-slate-200">{Math.round(value)}</span>
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
                 <div className={`${color} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
@@ -44,29 +44,29 @@ const RsiIndicator: React.FC<{ value: number }> = ({ value }) => {
 };
 
 const AnalysisPage: React.FC = () => {
+  const { productsData, globalCommoditiesData, isLoading } = useMarketData();
   const [activeTab, setActiveTab] = useState<Tab>('domestic');
-  const [domesticProduct, setDomesticProduct] = useState('hot-rolled');
-  const [globalCommodity, setGlobalCommodity] = useState('hrc');
-  const [selectedProduct, setSelectedProduct] = useState<ProductData>(productsData['hot-rolled']);
-  const [kpiProduct, setKpiProduct] = useState<ProductData>(productsData['hot-rolled']);
+  const [domesticProductKey, setDomesticProductKey] = useState('hot-rolled');
+  const [globalCommodityKey, setGlobalCommodityKey] = useState('hrc');
+  const [selectedProductKey, setSelectedProductKey] = useState('hot-rolled');
+  const [kpiProductKey, setKpiProductKey] = useState('hot-rolled');
   const [technicalProductKey, setTechnicalProductKey] = useState<string>('hot-rolled');
 
+  const selectedProduct: ProductData = productsData[selectedProductKey];
+  const kpiProduct: ProductData = productsData[kpiProductKey];
 
-  const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setSelectedProduct(productsData[e.target.value]);
-  }
-  
-  const handleKpiProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setKpiProduct(productsData[e.target.value]);
-  }
-
-  const allProductsForTechAnalysis = { ...productsData, ...globalCommoditiesData };
+  const allProductsForTechAnalysis = useMemo(() => ({ ...productsData, ...globalCommoditiesData }), [productsData, globalCommoditiesData]);
   const selectedTechAnalysisData = allProductsForTechAnalysis[technicalProductKey];
-  const techChartDataWithSma = selectedTechAnalysisData.chartData.map((val, index, arr) => ({
-      name: getPastDaysLabels(arr.length)[index],
-      value: val,
-      ma: calculateSMA(arr, 7)[index]
-  }));
+  
+  const techChartDataWithSma = useMemo(() => {
+    const data = selectedTechAnalysisData.chartData;
+    const sma = calculateSMA(data, 3);
+    return data.map((val, index) => ({
+        name: getPastDaysLabels(data.length)[index],
+        value: val,
+        ma: sma[index]
+    }));
+  }, [selectedTechAnalysisData]);
   
   const renderDataSource = (source: string, lastUpdated: string) => (
       <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 flex justify-between">
@@ -90,30 +90,32 @@ const AnalysisPage: React.FC = () => {
         {activeTab === 'domestic' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
+                <Card className="relative">
+                    {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                     <h3 className="font-bold mb-3">روند قیمت داخلی (هفت روز گذشته)</h3>
-                    <select value={domesticProduct} onChange={e => setDomesticProduct(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select value={domesticProductKey} onChange={e => setDomesticProductKey(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                         {Object.entries(productsData).map(([key, product]) => (
                             <option key={key} value={key}>{product.title}</option>
                         ))}
                     </select>
                     <ErrorBoundary>
-                      <AnalyticsChart data={productsData[domesticProduct].chartData} dataKey={productsData[domesticProduct].title} color="#6366f1" unit={productsData[domesticProduct].unit} labels={getPastDaysLabels(7)} />
+                      <AnalyticsChart data={productsData[domesticProductKey].chartData} dataKey={productsData[domesticProductKey].title} color="#6366f1" unit={productsData[domesticProductKey].unit} labels={getPastDaysLabels(7)} />
                     </ErrorBoundary>
-                    {renderDataSource(productsData[domesticProduct].source, productsData[domesticProduct].lastUpdated)}
+                    {renderDataSource(productsData[domesticProductKey].source, productsData[domesticProductKey].lastUpdated)}
                 </Card>
-                 <Card>
+                 <Card className="relative">
+                    {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                     <h3 className="font-bold mb-3">شاخص‌های کلیدی بازار داخلی</h3>
-                    <select onChange={handleKpiProductChange} defaultValue="hot-rolled" className="w-full p-2 mb-4 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select onChange={e => setKpiProductKey(e.target.value)} value={kpiProductKey} className="w-full p-2 mb-4 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                         {Object.entries(productsData).map(([key, product]) => (
                             <option key={key} value={key}>{product.title}</option>
                         ))}
                     </select>
                     <div className="space-y-3 text-sm">
                         <div className="flex justify-between"><span>قیمت فعلی:</span><span className="font-bold">{kpiProduct.price.toLocaleString('fa-IR')} {kpiProduct.unit}</span></div>
-                        <div className="flex justify-between"><span>تغییر روزانه:</span><span className={`font-bold ${kpiProduct.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.change}%</span></div>
-                        <div className="flex justify-between"><span>تغییر هفتگی:</span><span className={`font-bold ${kpiProduct.weeklyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.weeklyChange}%</span></div>
-                        <div className="flex justify-between"><span>تغییر ماهانه:</span><span className={`font-bold ${kpiProduct.monthlyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.monthlyChange}%</span></div>
+                        <div className="flex justify-between"><span>تغییر روزانه:</span><span className={`font-bold ${kpiProduct.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.change > 0 ? '+' : ''}{kpiProduct.change}%</span></div>
+                        <div className="flex justify-between"><span>تغییر هفتگی:</span><span className={`font-bold ${kpiProduct.weeklyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.weeklyChange > 0 ? '+' : ''}{kpiProduct.weeklyChange}%</span></div>
+                        <div className="flex justify-between"><span>تغییر ماهانه:</span><span className={`font-bold ${kpiProduct.monthlyChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{kpiProduct.monthlyChange > 0 ? '+' : ''}{kpiProduct.monthlyChange}%</span></div>
                         <div className="flex justify-between"><span>حجم معاملات (تن):</span><span className="font-bold">{kpiProduct.volume.toLocaleString('fa-IR')}</span></div>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/80">
@@ -127,25 +129,27 @@ const AnalysisPage: React.FC = () => {
         {activeTab === 'international' && (
             <div className="space-y-6 animate-fadeIn">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card>
+                    <Card className="relative">
+                        {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                         <h3 className="font-bold mb-3">روند قیمت جهانی (هفت روز گذشته)</h3>
-                        <select value={globalCommodity} onChange={e => setGlobalCommodity(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <select value={globalCommodityKey} onChange={e => setGlobalCommodityKey(e.target.value)} className="w-full p-2 mb-3 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                            {Object.entries(globalCommoditiesData).map(([key, commodity]) => (
                                <option key={key} value={key}>{commodity.title}</option>
                            ))}
                         </select>
                         <ErrorBoundary>
-                          <AnalyticsChart data={globalCommoditiesData[globalCommodity].chartData} dataKey={globalCommoditiesData[globalCommodity].title} color="#10b981" unit={globalCommoditiesData[globalCommodity].unit} labels={getPastDaysLabels(7)} />
+                          <AnalyticsChart data={globalCommoditiesData[globalCommodityKey].chartData} dataKey={globalCommoditiesData[globalCommodityKey].title} color="#10b981" unit={globalCommoditiesData[globalCommodityKey].unit} labels={getPastDaysLabels(7)} />
                         </ErrorBoundary>
-                        {renderDataSource(globalCommoditiesData[globalCommodity].source, globalCommoditiesData[globalCommodity].lastUpdated)}
+                        {renderDataSource(globalCommoditiesData[globalCommodityKey].source, globalCommoditiesData[globalCommodityKey].lastUpdated)}
                     </Card>
-                    <Card>
+                    <Card className="relative">
+                        {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                         <h3 className="font-bold mb-3">شاخص‌های کلیدی بازار جهانی</h3>
                         <div className="space-y-3 text-sm">
-                            <div className="flex justify-between"><span>قیمت جهانی فولاد HRC:</span><span className="font-bold">۷۷۸ دلار/تن <span className="text-emerald-500">(+۰.۸٪)</span></span></div>
-                            <div className="flex justify-between"><span>قراضه آهن ترکیه (HMS):</span><span className="font-bold">۴۴۰ دلار/تن <span className="text-emerald-500">(+۰.۴٪)</span></span></div>
-                            <div className="flex justify-between"><span>قیمت سنگ آهن:</span><span className="font-bold">۱۲۲ دلار/تن <span className="text-red-500">(-۰.۸٪)</span></span></div>
-                            <div className="flex justify-between"><span>زغال سنگ کک شو:</span><span className="font-bold">۲۵۳ دلار/تن <span className="text-emerald-500">(+۱.۲٪)</span></span></div>
+                            <div className="flex justify-between"><span>قیمت جهانی فولاد HRC:</span><span className="font-bold">{globalCommoditiesData['hrc'].chartData.slice(-1)[0]} دلار/تن <span className="text-emerald-500">(+۰.۸٪)</span></span></div>
+                            <div className="flex justify-between"><span>قراضه آهن ترکیه (HMS):</span><span className="font-bold">{globalCommoditiesData['scrap-metal'].chartData.slice(-1)[0]} دلار/تن <span className="text-emerald-500">(+۰.۴٪)</span></span></div>
+                            <div className="flex justify-between"><span>قیمت سنگ آهن:</span><span className="font-bold">{globalCommoditiesData['iron-ore'].chartData.slice(-1)[0]} دلار/تن <span className="text-red-500">(-۰.۸٪)</span></span></div>
+                            <div className="flex justify-between"><span>زغال سنگ کک شو:</span><span className="font-bold">{globalCommoditiesData['coking-coal'].chartData.slice(-1)[0]} دلار/تن <span className="text-emerald-500">(+۱.۲٪)</span></span></div>
                         </div>
                         {renderDataSource("Platts, Fastmarkets", globalCommoditiesData['hrc'].lastUpdated)}
                     </Card>
@@ -172,7 +176,8 @@ const AnalysisPage: React.FC = () => {
                 </Card>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3">
-                        <Card>
+                        <Card className="relative">
+                            {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                             <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-lg">نمودار تکنیکال {selectedTechAnalysisData.title}</h3>
                              <ErrorBoundary>
                                 <TechnicalAnalysisChart 
@@ -233,7 +238,7 @@ const AnalysisPage: React.FC = () => {
             <div className="space-y-6 animate-fadeIn">
                 <Card>
                     <h3 className="font-bold mb-3">انتخاب محصول برای تحلیل جامع</h3>
-                    <select onChange={handleProductChange} defaultValue="hot-rolled" className="w-full p-2 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select onChange={e => setSelectedProductKey(e.target.value)} value={selectedProductKey} className="w-full p-2 border rounded-md bg-slate-50/80 dark:bg-slate-700/80 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none">
                         {Object.entries(productsData).map(([key, product]) => (
                             <option key={key} value={key}>{product.title}</option>
                         ))}
@@ -247,7 +252,8 @@ const AnalysisPage: React.FC = () => {
                         </ul>
                          {renderDataSource(selectedProduct.source, selectedProduct.lastUpdated)}
                     </Card>
-                     <Card>
+                     <Card className="relative">
+                        {isLoading && <div className="absolute inset-0 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm z-10"></div>}
                         <h3 className="font-bold mb-3">نمودار روند قیمت (هفت روز گذشته)</h3>
                         <ErrorBoundary>
                            <AnalyticsChart data={selectedProduct.chartData} dataKey={selectedProduct.title} color="#f59e0b" unit={selectedProduct.unit} labels={getPastDaysLabels(7)} />

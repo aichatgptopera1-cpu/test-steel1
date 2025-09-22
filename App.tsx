@@ -7,6 +7,7 @@ import { ThemeContext, Theme } from './contexts/ThemeContext.tsx';
 import Modal from './components/Modal.tsx';
 import AuthorInfo from './components/AuthorInfo.tsx';
 import ResumePage from './pages/ResumePage.tsx';
+import { MarketDataProvider } from './contexts/MarketDataContext.tsx';
 
 // Lazy load page components for better initial performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage.tsx'));
@@ -94,34 +95,36 @@ function App() {
 
   return (
     <ThemeContext.Provider value={themeValue}>
-      <div className="antialiased text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300 bg-transparent">
-        <div className="max-w-4xl mx-auto px-4 pb-28">
-            {showResume ? (
-              <ResumePage onBack={handleHideResume} />
-            ) : (
-              <>
-                <Suspense fallback={<LoadingFallback />}>
-                  {renderPage()}
-                </Suspense>
-                 <footer className="text-center text-xs text-slate-500/80 dark:text-slate-400/80 mt-10 py-4">
-                    طراحی و توسعه توسط{' '}
-                    <button onClick={handleOpenAuthorModal} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline focus:outline-none">
-                        علی ثابت
-                    </button>
-                </footer>
-              </>
-            )}
+      <MarketDataProvider>
+        <div className="antialiased text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300 bg-transparent">
+          <div className="max-w-4xl mx-auto px-4 pb-28">
+              {showResume ? (
+                <ResumePage onBack={handleHideResume} />
+              ) : (
+                <>
+                  <Suspense fallback={<LoadingFallback />}>
+                    {renderPage()}
+                  </Suspense>
+                  <footer className="text-center text-xs text-slate-500/80 dark:text-slate-400/80 mt-10 py-4">
+                      طراحی و توسعه توسط{' '}
+                      <button onClick={handleOpenAuthorModal} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline focus:outline-none">
+                          علی ثابت
+                      </button>
+                  </footer>
+                </>
+              )}
+          </div>
+          {!showResume && (
+            <>
+              <BottomNav activePage={activePage} setPage={setActivePage} />
+              <ThemeToggle />
+            </>
+          )}
         </div>
-        {!showResume && (
-          <>
-            <BottomNav activePage={activePage} setPage={setActivePage} />
-            <ThemeToggle />
-          </>
-        )}
-      </div>
-      <Modal isOpen={isAuthorModalOpen} onClose={handleCloseAuthorModal}>
-        <AuthorInfo onShowResume={handleShowResume} />
-      </Modal>
+        <Modal isOpen={isAuthorModalOpen} onClose={handleCloseAuthorModal}>
+          <AuthorInfo onShowResume={handleShowResume} />
+        </Modal>
+      </MarketDataProvider>
     </ThemeContext.Provider>
   );
 }

@@ -19,6 +19,13 @@ export const productsData: ProductsData = {
         resistance: 42800,
         summary: 'قیمت در نزدیکی منطقه مقاومت قرار دارد و RSI به منطقه اشباع خرید نزدیک می‌شود. احتمال یک اصلاح کوتاه‌مدت وجود دارد. توصیه به احتیاط و انتظار برای شکست مقاومت یا بازگشت به سمت حمایت است.'
     },
+    detailedPrices: [
+        { spec: 'ضخامت 2mm', dimension: 1250, price: 41800 },
+        { spec: 'ضخامت 3mm', dimension: 1500, price: 42000 },
+        { spec: 'ضخامت 5mm', dimension: 1500, price: 42100 },
+        { spec: 'ضخامت 8mm', dimension: 1500, price: 42250 },
+        { spec: 'ضخامت 10mm', dimension: 1500, price: 42300 },
+    ],
   },
   'cold-rolled': {
     title: 'ورق سرد',
@@ -36,6 +43,12 @@ export const productsData: ProductsData = {
         resistance: 48500,
         summary: 'روند صعودی قوی است اما RSI وارد منطقه اشباع خرید شده. هرچند سیگنال خرید است اما ورود پله‌ای و با احتیاط توصیه می‌شود. شکست مقاومت ۴۸۵۰۰ می‌تواند رشد را تسریع کند.'
     },
+    detailedPrices: [
+        { spec: 'ضخامت 0.5mm', dimension: 1000, price: 48200 },
+        { spec: 'ضخامت 0.7mm', dimension: 1250, price: 47900 },
+        { spec: 'ضخامت 0.9mm', dimension: 1250, price: 47750 },
+        { spec: 'ضخامت 1mm', dimension: 1250, price: 47600 },
+    ],
   },
   'galvanized': {
     title: 'ورق گالوانیزه',
@@ -53,6 +66,11 @@ export const productsData: ProductsData = {
         resistance: 54000,
         summary: 'روند صعودی پایدار با RSI در محدوده مناسب. تا زمانی که قیمت بالای حمایت ۵۲۰۰۰ تومان قرار دارد، چشم‌انداز مثبت است. هدف بعدی، مقاومت ۵۴۰۰۰ تومان است.'
     },
+    detailedPrices: [
+        { spec: 'ضخامت 0.5mm', dimension: 1250, price: 53100 },
+        { spec: 'ضخامت 0.8mm', dimension: 1250, price: 52800 },
+        { spec: 'ضخامت 1mm', dimension: 1250, price: 52500 },
+    ],
   },
   'rebars': {
     title: 'میلگرد',
@@ -70,6 +88,14 @@ export const productsData: ProductsData = {
         resistance: 25500,
         summary: 'قیمت در یک کانال خنثی با تمایل به صعود قرار دارد. برای خرید، بهتر است منتظر شکست مقاومت ۲۵۵۰۰ یا اصلاح قیمت به سمت حمایت ۲۴۸۰۰ بود.'
     },
+    detailedPrices: [
+        { spec: 'سایز 12', dimension: 'A3', price: 25450 },
+        { spec: 'سایز 14', dimension: 'A3', price: 25150 },
+        { spec: 'سایز 16', dimension: 'A3', price: 25150 },
+        { spec: 'سایز 18', dimension: 'A3', price: 25200 },
+        { spec: 'سایز 20', dimension: 'A3', price: 25200 },
+        { spec: 'سایز 22', dimension: 'A3', price: 25300 },
+    ],
   },
   'i-beam': {
     title: 'تیرآهن',
@@ -87,6 +113,12 @@ export const productsData: ProductsData = {
         resistance: 40500,
         summary: 'روند حرکتی کند و نوسانات محدود است. بازار در حالت انتظار به سر می‌برد. استراتژی مناسب، خرید در کف‌های قیمتی و فروش در سقف‌ها است.'
     },
+    detailedPrices: [
+        { spec: 'سایز 14', dimension: '12m', price: 39800 },
+        { spec: 'سایز 16', dimension: '12m', price: 39950 },
+        { spec: 'سایز 18', dimension: '12m', price: 40100 },
+        { spec: 'سایز 20', dimension: '12m', price: 40500 },
+    ],
   },
   'slab': {
     title: 'اسلب',
@@ -104,6 +136,10 @@ export const productsData: ProductsData = {
         resistance: 35800,
         summary: 'قیمت با قدرت در حال صعود است. RSI به مرز اشباع خرید رسیده اما حجم معاملات بالا، نشان از قدرت خریداران دارد. هدف اول مقاومت ۳۵۸۰۰ است.'
     },
+    detailedPrices: [
+        { spec: 'فولاد خوزستان', dimension: '1500*250', price: 35200 },
+        { spec: 'فولاد هرمزگان', dimension: '1500*200', price: 35100 },
+    ],
   },
 };
 

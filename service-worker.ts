@@ -1,7 +1,8 @@
+// FIX: Add a reference to the 'webworker' library to make Service Worker event types available.
+/// <reference lib="webworker" />
+
 // FIX: Wrap code in an IIFE to avoid global scope conflicts with service-worker.js
 (() => {
-  /// <reference lib="webworker" />
-
   const CACHE_NAME = 'steel-dash-cache-v1';
 
   // FIX: Update cache list to only include bundled assets and CDNs, not individual source files.
@@ -23,7 +24,9 @@
 
   // Install event: open a cache and add all essential assets to it
   self.addEventListener('install', (event) => {
-    event.waitUntil(
+    // FIX: Cast event to InstallEvent to access the 'waitUntil' method, as the generic Event type lacks this property.
+    const installEvent = event as InstallEvent;
+    installEvent.waitUntil(
       caches.open(CACHE_NAME)
         .then((cache) => {
           console.log('Opened cache and caching assets');
@@ -37,8 +40,10 @@
 
   // Activate event: clean up old caches
   self.addEventListener('activate', (event) => {
+    // FIX: Cast event to ActivateEvent to access the 'waitUntil' method.
+    const activateEvent = event as ActivateEvent;
     const cacheWhitelist = [CACHE_NAME];
-    event.waitUntil(
+    activateEvent.waitUntil(
       caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
@@ -54,16 +59,18 @@
 
   // Fetch event: serve assets from cache if available, otherwise fetch from network (cache-first strategy)
   self.addEventListener('fetch', (event) => {
+    // FIX: Cast event to FetchEvent to access 'request' and 'respondWith' properties.
+    const fetchEvent = event as FetchEvent;
     // For API requests (e.g., gemini) and other dynamic content, always go to the network.
-    const isApiRequest = event.request.url.includes('generativelanguage.googleapis.com');
+    const isApiRequest = fetchEvent.request.url.includes('generativelanguage.googleapis.com');
 
     if (isApiRequest) {
-      event.respondWith(fetch(event.request));
+      fetchEvent.respondWith(fetch(fetchEvent.request));
       return;
     }
     
-    event.respondWith(
-      caches.match(event.request)
+    fetchEvent.respondWith(
+      caches.match(fetchEvent.request)
         .then((response) => {
           // Cache hit - return the response from cache
           if (response) {
@@ -71,7 +78,7 @@
           }
 
           // Not in cache - fetch from network, cache it, and return the response
-          return fetch(event.request).then(
+          return fetch(fetchEvent.request).then(
             (networkResponse) => {
               // Check if we received a valid response to cache.
               // We can cache basic (same-origin, successful) and opaque (cross-origin, no-cors) responses.
@@ -79,7 +86,7 @@
                 const responseToCache = networkResponse.clone();
                 caches.open(CACHE_NAME)
                   .then((cache) => {
-                    cache.put(event.request, responseToCache);
+                    cache.put(fetchEvent.request, responseToCache);
                   });
               }
               return networkResponse;

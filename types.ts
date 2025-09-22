@@ -18,6 +18,12 @@ export interface TechnicalInfo {
     summary: string;
 }
 
+export interface ProductPriceRow {
+  spec: string; 
+  dimension: string | number;
+  price: number;
+}
+
 export interface ProductData {
   title: string;
   price: number;
@@ -32,6 +38,7 @@ export interface ProductData {
   source: string;
   lastUpdated: string;
   technicalInfo: TechnicalInfo;
+  detailedPrices: ProductPriceRow[];
 }
 
 export interface GlobalCommodityData {
